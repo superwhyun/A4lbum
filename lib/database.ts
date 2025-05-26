@@ -59,6 +59,14 @@ export const saveLayout = (name: string, config: string, userId: number) => {
   return db.prepare('INSERT INTO layouts (name, config, created_by) VALUES (?, ?, ?)').run(name, config, userId);
 };
 
+export const updateLayout = (id: number, name: string, config: string) => {
+  return db.prepare('UPDATE layouts SET name = ?, config = ? WHERE id = ?').run(name, config, id);
+};
+
+export const deleteLayout = (id: number) => {
+  return db.prepare('DELETE FROM layouts WHERE id = ?').run(id);
+};
+
 export const getLayouts = () => {
   return db.prepare('SELECT * FROM layouts ORDER BY created_at DESC').all();
 };
