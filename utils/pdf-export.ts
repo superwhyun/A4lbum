@@ -90,20 +90,40 @@ export async function exportAlbumToPDF(album: Album, photosInput: Photo[] | Reco
       if (!photo) continue
 
       // 원본 이미지 로드
+      // PDF 생성 시점에만 파일을 base64로 읽어 이미지로 로드
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new window.Image()
-        // 외부 이미지일 때만 crossOrigin 적용
-        if (!photo.url.startsWith(window.location.origin)) {
-          image.crossOrigin = "anonymous"
+        if (photo.file) {
+          const reader = new FileReader()
+          reader.onload = () => {
+            image.src = reader.result as string
+          }
+          reader.onerror = (e) => {
+            console.warn("FileReader 에러:", e)
+            reject(new Error("FileReader 에러"))
+          }
+          image.onload = () => resolve(image)
+          image.onerror = (e) => {
+            console.warn("이미지 로딩 실패 (file):", e)
+            reject(new Error("이미지 로딩 실패 (file)"))
+          }
+          reader.readAsDataURL(photo.file)
+        } else if (photo.url) {
+          // 외부 이미지일 때만 crossOrigin 적용
+          if (!photo.url.startsWith(window.location.origin)) {
+            image.crossOrigin = "anonymous"
+          }
+          image.onload = () => resolve(image)
+          image.onerror = (e) => {
+            console.warn("이미지 로딩 실패 (url):", photo.url, e)
+            reject(new Error("이미지 로딩 실패 (url): " + photo.url))
+          }
+          image.src = photo.url
+        } else {
+          reject(new Error("photo.file과 photo.url이 모두 없음"))
         }
-        image.onload = () => resolve(image)
-        image.onerror = (e) => {
-          console.warn("이미지 로딩 실패:", photo.url, e)
-          reject(new Error("이미지 로딩 실패: " + photo.url))
-        }
-        image.src = photo.url
       }).catch((err) => {
-        console.warn("이미지 로딩 에러, PDF에 포함되지 않음:", photo.url, err)
+        console.warn("이미지 로딩 에러, PDF에 포함되지 않음:", photo, err)
         return null
       })
       if (!img) continue

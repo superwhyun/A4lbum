@@ -4,6 +4,7 @@ export interface Photo {
   url: string
   width: number
   height: number
+  thumbnailUrl?: string
 }
 
 export interface PhotoLayout {

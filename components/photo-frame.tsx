@@ -19,6 +19,22 @@ export function PhotoFrame({ layout, photo, editMode, pageId, isSelected, onLayo
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const frameRef = useRef<HTMLDivElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // 미리보기 URL 동적 생성 및 해제
+  React.useEffect(() => {
+    if (photo.file) {
+      const url = URL.createObjectURL(photo.file)
+      setPreviewUrl(url)
+      return () => {
+        URL.revokeObjectURL(url)
+      }
+    } else if (photo.url) {
+      setPreviewUrl(photo.url)
+    } else {
+      setPreviewUrl("/placeholder.svg")
+    }
+  }, [photo.file, photo.url])
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -112,7 +128,7 @@ export function PhotoFrame({ layout, photo, editMode, pageId, isSelected, onLayo
       onClick={handleClick}
     >
       <img
-        src={photo.url || "/placeholder.svg"}
+        src={previewUrl || "/placeholder.svg"}
         alt=""
         className="w-full h-full object-cover select-none"
         style={{

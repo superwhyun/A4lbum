@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { createContext, useContext, useState, type ReactNode } from "react"
 import type { Photo, Album, LayoutTemplate, AlbumPage, PhotoLayout } from "@/types/album"
 
@@ -20,8 +21,7 @@ const AlbumContext = createContext<AlbumContextType | undefined>(undefined)
 export function AlbumProvider({ children }: { children: ReactNode }) {
   const [photos, setPhotos] = useState<Photo[]>([])
   const [album, setAlbum] = useState<Album | null>(null)
-  const [templates, setTemplates] = useState<LayoutTemplate[]>([
-    // 기본 템플릿들 - 여백을 고려한 레이아웃
+  const defaultTemplates: LayoutTemplate[] = [
     {
       id: "template-3-portrait",
       name: "3장 세로형",
@@ -59,27 +59,75 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         { id: "6", x: 68, y: 34, width: 32, height: 31 },
       ],
     },
-  ])
+  ]
+  const [templates, setTemplates] = useState<LayoutTemplate[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("a4lbum-templates")
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch {
+          return defaultTemplates
+        }
+      }
+    }
+    return defaultTemplates
+  })
+
+  // templates가 바뀔 때마다 localStorage에 저장
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("a4lbum-templates", JSON.stringify(templates))
+    }
+  }, [templates])
 
   const addPhotos = async (files: File[]) => {
     const newPhotos: Photo[] = []
 
     for (const file of files) {
+      // width/height 추출을 위해 임시 URL 사용
       const url = URL.createObjectURL(file)
       const img = new Image()
-
+  
       await new Promise((resolve) => {
         img.onload = resolve
         img.src = url
+      })
+  
+      // 썸네일 생성 (최대 200x200)
+      const thumbnailUrl = await new Promise<string>((resolve) => {
+        const canvas = document.createElement("canvas")
+        const maxSize = 200
+        let tw = img.width
+        let th = img.height
+        if (tw > th) {
+          if (tw > maxSize) {
+            th = Math.round((th * maxSize) / tw)
+            tw = maxSize
+          }
+        } else {
+          if (th > maxSize) {
+            tw = Math.round((tw * maxSize) / th)
+            th = maxSize
+          }
+        }
+        canvas.width = tw
+        canvas.height = th
+        const ctx = canvas.getContext("2d")!
+        ctx.drawImage(img, 0, 0, tw, th)
+        resolve(canvas.toDataURL("image/jpeg", 0.7))
       })
 
       newPhotos.push({
         id: `photo-${Date.now()}-${Math.random()}`,
         file,
-        url,
+        url: "", // 타입만 맞추고, 실제 사용 시점에 동적 생성
         width: img.width,
         height: img.height,
+        thumbnailUrl,
       })
+      // 메모리 해제
+      URL.revokeObjectURL(url)
     }
 
     setPhotos((prev) => [...prev, ...newPhotos])

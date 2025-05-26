@@ -54,13 +54,7 @@ export default function HomePage() {
                   <h3 className="text-lg font-medium mb-4">업로드된 사진 ({photos.length}장)</h3>
                   <div className="grid grid-cols-6 gap-2">
                     {photos.slice(0, 12).map((photo) => (
-                      <div key={photo.id} className="aspect-square">
-                        <img
-                          src={photo.url || "/placeholder.svg"}
-                          alt=""
-                          className="w-full h-full object-cover rounded"
-                        />
-                      </div>
+                      <PhotoThumbnail key={photo.id} photo={photo} />
                     ))}
                     {photos.length > 12 && (
                       <div className="aspect-square bg-gray-100 rounded flex items-center justify-center">
@@ -118,6 +112,20 @@ export default function HomePage() {
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+// 썸네일 미리보기용 컴포넌트
+import React from "react"
+function PhotoThumbnail({ photo }: { photo: { thumbnailUrl?: string } }) {
+  return (
+    <div className="aspect-square">
+      <img
+        src={photo.thumbnailUrl || "/placeholder.svg"}
+        alt=""
+        className="w-full h-full object-cover rounded"
+      />
     </div>
   )
 }
