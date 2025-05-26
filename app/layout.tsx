@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { AlbumProvider } from "@/contexts/album-context"
+import { AuthProvider } from "@/contexts/auth-context"
+import { Header } from "@/components/header"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,7 +22,10 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={inter.className}>
-        <AlbumProvider>{children}</AlbumProvider>
+        <AuthProvider>
+          <Header />
+          <AlbumProvider>{children}</AlbumProvider>
+        </AuthProvider>
       </body>
     </html>
   )
