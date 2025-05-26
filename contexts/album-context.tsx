@@ -2,6 +2,7 @@
 
 import React from "react"
 import { createContext, useContext, useState, type ReactNode } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import type { Photo, Album, LayoutTemplate, AlbumPage, PhotoLayout } from "@/types/album"
 
 interface AlbumContextType {
@@ -19,8 +20,35 @@ interface AlbumContextType {
 const AlbumContext = createContext<AlbumContextType | undefined>(undefined)
 
 export function AlbumProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
   const [photos, setPhotos] = useState<Photo[]>([])
   const [album, setAlbum] = useState<Album | null>(null)
+  // 서버에서 관리자 레이아웃 불러오기
+  const loadServerLayouts = async () => {
+    try {
+      const response = await fetch('/api/layouts');
+      if (response.ok) {
+        const data = await response.json();
+        return data.layouts.map((layout: any) => ({
+          id: `server-${layout.id}`,
+          name: layout.name,
+          photoCount: layout.config.photoCount,
+          orientation: layout.config.orientation,
+          layouts: layout.config.layouts,
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load server layouts:', error);
+    }
+    return [];
+  };
+
+  // 사용자별 localStorage 키 생성
+  const getStorageKey = (key: string) => {
+    const userId = user?.id ? `user-${user.id}` : 'guest';
+    return `a4lbum-${key}-${userId}`;
+  };
+
   const defaultTemplates: LayoutTemplate[] = [
     {
       id: "template-3-portrait",
@@ -62,7 +90,8 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   ]
   const [templates, setTemplates] = useState<LayoutTemplate[]>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("a4lbum-templates")
+      const storageKey = user?.id ? `a4lbum-templates-user-${user.id}` : 'a4lbum-templates-guest';
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
           return JSON.parse(saved)
@@ -74,12 +103,71 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     return defaultTemplates
   })
 
-  // templates가 바뀔 때마다 localStorage에 저장
+  // templates가 바뀔 때마다 사용자 템플릿만 localStorage에 저장
   React.useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("a4lbum-templates", JSON.stringify(templates))
+      // 서버 레이아웃(server- 접두사)을 제외한 사용자 레이아웃만 저장
+      const userTemplates = templates.filter(template => !template.id.startsWith('server-'));
+      const storageKey = getStorageKey('templates');
+      localStorage.setItem(storageKey, JSON.stringify(userTemplates));
     }
-  }, [templates])
+  }, [templates, user?.id]);
+
+  // 사용자별 photos localStorage 관리
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storageKey = getStorageKey('photos');
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const savedPhotos = JSON.parse(saved);
+          setPhotos(savedPhotos);
+        } catch (error) {
+          console.error('Failed to load photos from localStorage:', error);
+        }
+      } else {
+        setPhotos([]);
+      }
+    }
+  }, [user?.id]);
+
+  // photos가 바뀔 때마다 사용자별 localStorage에 저장
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && photos.length > 0) {
+      const storageKey = getStorageKey('photos');
+      localStorage.setItem(storageKey, JSON.stringify(photos));
+    }
+  }, [photos, user?.id]);
+
+  // 사용자별 album localStorage 관리
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storageKey = getStorageKey('album');
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const savedAlbum = JSON.parse(saved);
+          setAlbum(savedAlbum);
+        } catch (error) {
+          console.error('Failed to load album from localStorage:', error);
+        }
+      } else {
+        setAlbum(null);
+      }
+    }
+  }, [user?.id]);
+
+  // album이 바뀔 때마다 사용자별 localStorage에 저장
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storageKey = getStorageKey('album');
+      if (album) {
+        localStorage.setItem(storageKey, JSON.stringify(album));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    }
+  }, [album, user?.id]);
 
   const addPhotos = async (files: File[]) => {
     const newPhotos: Photo[] = []
@@ -303,8 +391,42 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   }
 
   const deleteTemplate = (templateId: string) => {
+    // 서버 레이아웃(관리자 레이아웃)은 삭제 불가
+    if (templateId.startsWith('server-')) {
+      console.warn('Cannot delete server layout');
+      return;
+    }
     setTemplates((prev) => prev.filter((t) => t.id !== templateId))
   }
+
+  // 사용자 전환 시 템플릿 다시 로드 (서버 + 로컬)
+  React.useEffect(() => {
+    const loadAllTemplates = async () => {
+      if (typeof window !== "undefined") {
+        // 서버에서 관리자 레이아웃 불러오기
+        const serverLayouts = await loadServerLayouts();
+        
+        // 로컬 사용자 레이아웃 불러오기
+        const storageKey = user?.id ? `a4lbum-templates-user-${user.id}` : 'a4lbum-templates-guest';
+        const saved = localStorage.getItem(storageKey);
+        let userLayouts = defaultTemplates;
+        
+        if (saved) {
+          try {
+            userLayouts = JSON.parse(saved);
+          } catch {
+            userLayouts = defaultTemplates;
+          }
+        }
+        
+        // 서버 레이아웃 + 사용자 레이아웃 합치기
+        const allTemplates = [...serverLayouts, ...userLayouts];
+        setTemplates(allTemplates);
+      }
+    };
+    
+    loadAllTemplates();
+  }, [user?.id]);
 
   return (
     <AlbumContext.Provider

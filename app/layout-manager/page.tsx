@@ -1,15 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAlbum } from "@/contexts/album-context"
+import { useAuth } from "@/contexts/auth-context"
 import type { LayoutTemplate } from "@/types/album"
 
 export default function LayoutManagerPage() {
   const { templates, addTemplate, deleteTemplate } = useAlbum()
+  const { user } = useAuth()
   const [isCreating, setIsCreating] = useState(false)
   const [newTemplate, setNewTemplate] = useState<Partial<LayoutTemplate>>({
     name: "",
@@ -17,6 +19,12 @@ export default function LayoutManagerPage() {
     orientation: "portrait",
     layouts: [],
   })
+
+  const GRID_SIZE = 1.67; // 약 1.67% 단위 그리드 (60x60 그리드)
+
+  const snapToGrid = (value: number) => {
+    return Math.round(value / GRID_SIZE) * GRID_SIZE;
+  };
 
   const createDefaultLayout = (photoCount: number, orientation: "portrait" | "landscape") => {
     const layouts = []
@@ -31,10 +39,10 @@ export default function LayoutManagerPage() {
 
       layouts.push({
         id: `layout-${i}`,
-        x: col * cellWidth,
-        y: row * cellHeight,
-        width: cellWidth - 2,
-        height: cellHeight - 2,
+        x: snapToGrid(col * cellWidth),
+        y: snapToGrid(row * cellHeight),
+        width: snapToGrid(cellWidth - 2),
+        height: snapToGrid(cellHeight - 2),
       })
     }
 
@@ -51,7 +59,7 @@ export default function LayoutManagerPage() {
     })
   }
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
     if (newTemplate.name && newTemplate.layouts) {
       const template: LayoutTemplate = {
         id: `template-${Date.now()}`,
@@ -61,6 +69,33 @@ export default function LayoutManagerPage() {
         layouts: newTemplate.layouts,
       }
 
+      // 관리자면 서버에 저장
+      if (user?.role === 'admin') {
+        try {
+          const response = await fetch('/api/layouts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: template.name,
+              config: {
+                photoCount: template.photoCount,
+                orientation: template.orientation,
+                layouts: template.layouts
+              }
+            })
+          });
+
+          if (response.ok) {
+            console.log('Template saved to server');
+          } else {
+            console.error('Failed to save template to server');
+          }
+        } catch (error) {
+          console.error('Error saving template to server:', error);
+        }
+      }
+
+      // 로컬에도 저장 (기존 동작 유지)
       addTemplate(template)
       setIsCreating(false)
       setNewTemplate({})
@@ -136,7 +171,11 @@ export default function LayoutManagerPage() {
                     <label className="block text-sm font-medium mb-2">방향</label>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setNewTemplate((prev) => ({ ...prev, orientation: "portrait" }))}
+                        onClick={() => setNewTemplate((prev) => ({ 
+                          ...prev, 
+                          orientation: "portrait",
+                          layouts: createDefaultLayout(prev.photoCount || 3, "portrait")
+                        }))}
                         className={`px-4 py-2 rounded border ${
                           newTemplate.orientation === "portrait" ? "bg-blue-500 text-white" : "bg-white text-gray-700"
                         }`}
@@ -144,7 +183,11 @@ export default function LayoutManagerPage() {
                         세로형
                       </button>
                       <button
-                        onClick={() => setNewTemplate((prev) => ({ ...prev, orientation: "landscape" }))}
+                        onClick={() => setNewTemplate((prev) => ({ 
+                          ...prev, 
+                          orientation: "landscape",
+                          layouts: createDefaultLayout(prev.photoCount || 3, "landscape")
+                        }))}
                         className={`px-4 py-2 rounded border ${
                           newTemplate.orientation === "landscape" ? "bg-blue-500 text-white" : "bg-white text-gray-700"
                         }`}
@@ -171,9 +214,13 @@ export default function LayoutManagerPage() {
                   <div
                     className="border-2 border-gray-300 bg-white relative"
                     style={{
-                      width: "300px",
+                      width: newTemplate.orientation === "portrait" ? "300px" : "424px",
                       height: newTemplate.orientation === "portrait" ? "424px" : "300px",
-                      aspectRatio: newTemplate.orientation === "portrait" ? "210/297" : "297/210",
+                      backgroundImage: `
+                        linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                        linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+                      `,
+                      backgroundSize: `${(newTemplate.orientation === "portrait" ? 300 : 424) * GRID_SIZE / 100}px ${(newTemplate.orientation === "portrait" ? 424 : 300) * GRID_SIZE / 100}px`,
                     }}
                   >
                     {newTemplate.layouts?.map((layout, index) => (
@@ -209,8 +256,8 @@ export default function LayoutManagerPage() {
                                 idx === dragIndex
                                   ? {
                                       ...l,
-                                      x: Math.max(0, Math.min(100 - l.width, startLayout.x + percentX)),
-                                      y: Math.max(0, Math.min(100 - l.height, startLayout.y + percentY)),
+                                      x: snapToGrid(Math.max(0, Math.min(100 - l.width, startLayout.x + percentX))),
+                                      y: snapToGrid(Math.max(0, Math.min(100 - l.height, startLayout.y + percentY))),
                                     }
                                   : l
                               );
@@ -251,8 +298,8 @@ export default function LayoutManagerPage() {
                                   idx === resizeIndex
                                     ? {
                                         ...l,
-                                        width: Math.max(5, Math.min(100 - l.x, startLayout.width + percentW)),
-                                        height: Math.max(5, Math.min(100 - l.y, startLayout.height + percentH)),
+                                        width: snapToGrid(Math.max(GRID_SIZE, Math.min(100 - l.x, startLayout.width + percentW))),
+                                        height: snapToGrid(Math.max(GRID_SIZE, Math.min(100 - l.y, startLayout.height + percentH))),
                                       }
                                     : l
                                 );
@@ -319,22 +366,28 @@ export default function LayoutManagerPage() {
                     >
                       수정
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => deleteTemplate(template.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {!template.id.startsWith('server-') && (
+                      <Button variant="ghost" size="sm" onClick={() => deleteTemplate(template.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
 
                 <div className="text-sm text-gray-600 mb-3">
                   {template.photoCount}장 · {template.orientation === "portrait" ? "세로형" : "가로형"}
+                  {template.id.startsWith('server-') && (
+                    <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                      관리자 템플릿
+                    </span>
+                  )}
                 </div>
 
                 <div
                   className="border border-gray-300 bg-gray-50 relative mx-auto"
                   style={{
-                    width: "150px",
+                    width: template.orientation === "portrait" ? "150px" : "212px",
                     height: template.orientation === "portrait" ? "212px" : "150px",
-                    aspectRatio: template.orientation === "portrait" ? "210/297" : "297/210",
                   }}
                 >
                   {template.layouts.map((layout, index) => (
