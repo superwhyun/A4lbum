@@ -1,0 +1,114 @@
+project:
+  name: "A4lbum - A4 크기 앨범 생성기"
+  description: "사용자가 사진을 Drag&Drop으로 업로드하여 A4 크기의 앨범을 만드는 웹 애플리케이션"
+  version: "0.1.0"
+  framework: "Next.js 15 with TypeScript"
+
+features:
+  photo_upload:
+    description: "사진 드래그앤드롭 업로드 기능 (브라우저 내에서만 처리, 서버 업로드 없음)"
+    status: "완료"
+    
+  theme_selection:
+    description: "10가지 테마 중 선택 가능"
+    status: "완료"
+    
+  orientation_selection:
+    description: "Portrait/Landscape 방향 선택"
+    status: "완료"
+    
+  album_generation:
+    description: "페이지당 3-6장의 사진으로 구성된 A4 앨범 자동 생성"
+    status: "개발중"
+    
+  layout_templates:
+    description: "사진 수에 따른 균형잡힌 레이아웃 템플릿 시스템"
+    status: "개발중"
+    
+  album_viewer:
+    description: "좌우 스크롤 가능한 앨범 뷰어"
+    status: "완료"
+    
+  page_editing:
+    description: "각 페이지별 레이아웃, 사진 수, 크기 조절 기능"
+    status: "개발중"
+    
+  layout_manager:
+    description: "레이아웃 템플릿 생성 및 관리 페이지"
+    status: "개발중"
+    
+  photo_positioning:
+    description: "미리보기에서 사진 위치 조정 (상하좌우 이동)"
+    status: "개발중"
+    
+  pdf_download:
+    description: "깨끗한 PDF 다운로드 기능"
+    status: "개발중"
+
+files:
+  app/page.tsx:
+    description: "메인 페이지 - 사진 업로드 드롭존, 테마 선택, 방향 선택"
+    status: "완료"
+    
+  app/layout.tsx:
+    description: "루트 레이아웃 - 전체 앱 구조 및 테마 프로바이더"
+    status: "완료"
+    
+  app/layout-manager/page.tsx:
+    description: "레이아웃 관리자 페이지 - 템플릿 생성/편집"
+    status: "개발필요"
+    
+  components/photo-dropzone.tsx:
+    description: "사진 드래그앤드롭 업로드 컴포넌트"
+    status: "완료"
+    
+  components/theme-selector.tsx:
+    description: "10가지 테마 선택 컴포넌트"
+    status: "완료"
+    
+  components/album-viewer.tsx:
+    description: "앨범 뷰어 - 좌우 스크롤 가능한 페이지 뷰"
+    status: "완료"
+    
+  components/album-page.tsx:
+    description: "앨범 개별 페이지 컴포넌트 - A4 크기 레이아웃"
+    status: "완료"
+    
+  components/photo-frame.tsx:
+    description: "사진 프레임 컴포넌트 - 위치 조정 가능"
+    status: "완료"
+
+
+todo:
+  high_priority:
+    - "레이아웃 매니저 페이지 구현 - 드래그로 사진 영역 크기/위치 조정"
+    - "페이지별 편집 기능 - 사진 수 조절, 레이아웃 변경"
+    - "사진 위치 미세 조정 기능 - 상하좌우 이동"
+    - "PDF 다운로드 시 그레이 톤 제거"
+    
+  medium_priority:  
+    - "3-6장 사진에 대한 레이아웃 템플릿 시스템 완성"
+    - "랜덤 레이아웃 생성 알고리즘 개선"
+    - "사진 크기 자동 조절 로직 최적화"
+    
+  low_priority:
+    - "테마별 색상/스타일 다양화"
+    - "사용자 레이아웃 템플릿 저장/불러오기"
+    - "앨범 미리보기 썸네일 개선"
+
+technical_specs:
+  layout_system:
+    page_size: "A4 (210 × 297mm)"
+    photos_per_page: "3-6장 (랜덤)"
+    supported_formats: "JPG, JPEG, PNG, WebP"
+    
+  templates:
+    "3_photos": "균형잡힌 3분할 레이아웃"
+    "4_photos": "2x2 그리드 또는 비대칭 배치"
+    "5_photos": "중앙 큰 사진 + 4모서리 작은 사진"
+    "6_photos": "2x3 또는 3x2 그리드"
+    
+  export:
+    format: "PDF"
+    resolution: "300 DPI"
+    color_space: "RGB"

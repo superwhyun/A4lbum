@@ -1,0 +1,27 @@
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import { AlbumProvider } from "@/contexts/album-context"
+
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "A4lbum - 나만의 A4 앨범 만들기",
+  description: "사진을 드래그&드롭으로 업로드하여 아름다운 A4 크기의 앨범을 만들어보세요",
+    generator: 'v0.dev'
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="ko">
+      <body className={inter.className}>
+        <AlbumProvider>{children}</AlbumProvider>
+      </body>
+    </html>
+  )
+}
