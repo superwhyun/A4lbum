@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { saveLayout, getLayouts } from '@/lib/database';
+import { saveLayout, getLayouts, updateLayout, deleteLayout } from '@/lib/database';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -50,6 +50,71 @@ export async function GET() {
 
   } catch (error) {
     console.error('Layout fetch error:', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const token = request.cookies.get('token')?.value;
+    
+    if (!token) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    if (decoded.role !== 'admin') {
+      return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 });
+    }
+
+    const { id, name, config } = await request.json();
+    
+    if (!id || !name || !config) {
+      return NextResponse.json({ error: '레이아웃 ID, 이름, 설정이 필요합니다.' }, { status: 400 });
+    }
+
+    updateLayout(id, name, JSON.stringify(config));
+    
+    return NextResponse.json({ 
+      message: '레이아웃이 수정되었습니다.'
+    });
+
+  } catch (error) {
+    console.error('Layout update error:', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const token = request.cookies.get('token')?.value;
+    
+    if (!token) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    if (decoded.role !== 'admin') {
+      return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json({ error: '레이아웃 ID가 필요합니다.' }, { status: 400 });
+    }
+
+    deleteLayout(parseInt(id));
+    
+    return NextResponse.json({ 
+      message: '레이아웃이 삭제되었습니다.'
+    });
+
+  } catch (error) {
+    console.error('Layout delete error:', error);
     return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
