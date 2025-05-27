@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '레이아웃 이름과 설정이 필요합니다.' }, { status: 400 });
     }
 
-    const result = saveLayout(name, JSON.stringify(config), decoded.userId);
+    const result = await saveLayout(name, JSON.stringify(config), decoded.userId);
     
     return NextResponse.json({ 
       message: '레이아웃이 저장되었습니다.',
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const layouts = getLayouts();
+    const layouts = await getLayouts();
     
     return NextResponse.json({
       layouts: layouts.map((layout: any) => ({
@@ -74,7 +74,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '레이아웃 ID, 이름, 설정이 필요합니다.' }, { status: 400 });
     }
 
-    updateLayout(id, name, JSON.stringify(config));
+    await updateLayout(id, name, JSON.stringify(config));
     
     return NextResponse.json({ 
       message: '레이아웃이 수정되었습니다.'
@@ -107,7 +107,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '레이아웃 ID가 필요합니다.' }, { status: 400 });
     }
 
-    deleteLayout(parseInt(id));
+    await deleteLayout(parseInt(id));
     
     return NextResponse.json({ 
       message: '레이아웃이 삭제되었습니다.'

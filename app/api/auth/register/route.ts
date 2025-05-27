@@ -13,12 +13,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '사용자명은 3자 이상, 비밀번호는 4자 이상이어야 합니다.' }, { status: 400 });
     }
 
-    const existingUser = getUserByUsername(username);
+    const existingUser = await getUserByUsername(username);
     if (existingUser) {
       return NextResponse.json({ error: '이미 존재하는 사용자명입니다.' }, { status: 409 });
     }
 
-    createUser(username, password);
+    await createUser(username, password);
 
     return NextResponse.json({ message: '회원가입이 완료되었습니다.' });
 
