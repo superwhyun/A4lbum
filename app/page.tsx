@@ -2,47 +2,39 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Settings, ImageIcon } from "lucide-react"
+import { Settings, ImageIcon, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Header } from "@/components/header"
 import { PhotoDropzone } from "@/components/photo-dropzone"
 import { ThemeSelector } from "@/components/theme-selector"
 import { AlbumViewer } from "@/components/album-viewer"
 import { useAlbum } from "@/contexts/album-context"
+import { useAuth } from "@/contexts/auth-context"
 import type { Theme } from "@/types/album"
 
 export default function HomePage() {
   const { photos, album, createAlbum } = useAlbum()
+  const { user } = useAuth()
   const [selectedTheme, setSelectedTheme] = useState<Theme>("classic")
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait")
+  const [showPreview, setShowPreview] = useState(true)
 
   const handleCreateAlbum = () => {
     createAlbum(selectedTheme, orientation)
+    setShowPreview(true)
+  }
+
+  const handleGoToPreview = () => {
+    setShowPreview(true)
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <ImageIcon className="h-8 w-8 text-blue-600 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-900">A4lbum</h1>
-            </div>
-            <Link href="/layout-manager">
-              <Button variant="outline">
-                <Settings className="w-4 h-4 mr-2" />
-                레이아웃 관리자
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!album ? (
+        {!album || !showPreview ? (
           <div className="space-y-8">
             <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">나만의 A4 앨범 만들기</h2>
               <p className="text-lg text-gray-600">사진을 업로드하고 테마를 선택하여 아름다운 앨범을 만들어보세요</p>
             </div>
 
@@ -91,7 +83,6 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-
                 <div className="mt-8 text-center">
                   <Button onClick={handleCreateAlbum} size="lg">
                     앨범 만들기
@@ -104,9 +95,6 @@ export default function HomePage() {
           <div className="space-y-8">
             <div className="flex items-center justify-between">
               <h2 className="text-3xl font-bold text-gray-900">내 앨범</h2>
-              <Button onClick={() => window.location.reload()} variant="outline">
-                새 앨범 만들기
-              </Button>
             </div>
             <AlbumViewer />
           </div>

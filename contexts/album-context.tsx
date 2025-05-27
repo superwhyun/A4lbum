@@ -16,6 +16,7 @@ interface AlbumContextType {
   addTemplate: (template: LayoutTemplate) => void
   updateTemplate: (template: LayoutTemplate) => void
   deleteTemplate: (templateId: string) => void
+  resetAlbum: () => void
 }
 
 const AlbumContext = createContext<AlbumContextType | undefined>(undefined)
@@ -488,6 +489,11 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const resetAlbum = () => {
+    setAlbum(null);
+    setPhotos([]);
+  };
+
   return (
     <AlbumContext.Provider
       value={{
@@ -501,6 +507,7 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         addTemplate,
         updateTemplate,
         deleteTemplate,
+        resetAlbum,
       }}
     >
       {children}

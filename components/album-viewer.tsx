@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { ChevronLeft, ChevronRight, Edit, Download } from "lucide-react"
 import { useAlbum } from "@/contexts/album-context"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,8 @@ import { exportAlbumToPDF } from "@/utils/pdf-export"
 export function AlbumViewer() {
   const { album, photos, swapPhotos, templates, updatePage } = useAlbum()
   const [currentPage, setCurrentPage] = useState(0)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([])
   const [editMode, setEditMode] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<{ layoutId: string; pageId: string } | null>(null)
 
@@ -28,6 +30,20 @@ export function AlbumViewer() {
   const prevPage = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 0))
   }
+
+  // Center the selected page in the scroll area when currentPage changes
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    const page = pageRefs.current[currentPage]
+    if (container && page) {
+      const containerRect = container.getBoundingClientRect()
+      const pageRect = page.getBoundingClientRect()
+      const scrollLeft = container.scrollLeft
+      const offset = pageRect.left - containerRect.left
+      const centerOffset = offset - (containerRect.width / 2) + (pageRect.width / 2)
+      container.scrollTo({ left: scrollLeft + centerOffset, behavior: "smooth" })
+    }
+  }, [currentPage, album.pages.length])
 
   const handlePhotoSelect = (layoutId: string, pageId: string) => {
     console.log('Photo selected:', { layoutId, pageId, currentSelected: selectedPhoto })
@@ -81,7 +97,7 @@ export function AlbumViewer() {
       </div>
 
       <div className="relative" id="album-viewer">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={scrollContainerRef}>
           <div className="flex gap-4 pb-4" style={{ width: "max-content" }}>
             {album.pages.map((page, index) => {
               // 편집 모드에서만, 해당 페이지의 사진 수와 orientation이 일치하는 템플릿 목록
@@ -95,6 +111,7 @@ export function AlbumViewer() {
               return (
                 <div
                   key={page.id}
+                  ref={el => { pageRefs.current[index] = el }}
                   className={`album-page flex-shrink-0 transition-opacity ${index === currentPage ? "opacity-100" : "opacity-50"}`}
                   style={{
                     width: album.orientation === "portrait" ? "400px" : "600px",
@@ -173,10 +190,17 @@ export function AlbumViewer() {
             <button
               key={index}
               onClick={() => setCurrentPage(index)}
-              className={`w-3 h-3 rounded-full transition-colors ${
-                index === currentPage ? "bg-blue-500" : "bg-gray-300"
-              }`}
-            />
+              className={`px-3 py-1 rounded transition-colors font-semibold border
+                ${index === currentPage
+                  ? "bg-blue-500 text-white border-blue-500"
+                  : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-blue-100"}
+              `}
+              style={{
+                minWidth: "2.5rem"
+              }}
+            >
+              {index + 1}
+            </button>
           ))}
         </div>
       </div>

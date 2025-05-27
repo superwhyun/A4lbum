@@ -25,11 +25,16 @@ export default function RootLayout({
       <body className={inter.className}>
         <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''}>
           <AuthProvider>
-            <Header />
-            <AlbumProvider>{children}</AlbumProvider>
+            <AlbumProvider>
+              <LayoutWithHeader>{children}</LayoutWithHeader>
+            </AlbumProvider>
           </AuthProvider>
         </GoogleOAuthProvider>
       </body>
     </html>
   )
 }
+
+// --- Add below: ---
+
+import LayoutWithHeader from "@/components/layout-with-header";
