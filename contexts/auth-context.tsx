@@ -8,7 +8,7 @@ interface User {
   role: string;
 }
 
-import { GoogleOAuthProvider, useGoogleLogin, TokenResponse } from '@react-oauth/google';
+import { useGoogleLogin, TokenResponse } from '@react-oauth/google';
 
 interface AuthContextType {
   user: User | null;
@@ -98,24 +98,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // useGoogleLogin hook for initiating Google Sign-In flow
-  // Using flow: 'implicit' to attempt to get id_token directly. Note: Implicit flow is deprecated by Google.
   const triggerGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse: TokenResponse) => { 
-      // For implicit flow, TokenResponse should contain id_token.
-      const idToken = tokenResponse.id_token;
+      // Using authorization code flow, we get access_token
+      const accessToken = tokenResponse.access_token;
 
-      if (!idToken) {
-        console.error('Google Sign-In: No id_token found in response from implicit flow.', tokenResponse);
+      if (!accessToken) {
+        console.error('Google Sign-In: No access_token found in response.', tokenResponse);
         googleLoginPromiseCallbacks?.resolve(false);
         setGoogleLoginPromiseCallbacks(null);
         return;
       }
 
       try {
+        // Get user info from Google API using access_token
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (!userInfoResponse.ok) {
+          console.error('Failed to get user info from Google');
+          googleLoginPromiseCallbacks?.resolve(false);
+          setGoogleLoginPromiseCallbacks(null);
+          return;
+        }
+
+        const googleUser = await userInfoResponse.json();
+        
+        // Send user info to our backend
         const response = await fetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken }), // Send the obtained id_token
+          body: JSON.stringify({ 
+            googleId: googleUser.id,
+            email: googleUser.email,
+            name: googleUser.name,
+            picture: googleUser.picture
+          }),
         });
 
         if (response.ok) {
@@ -134,15 +155,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setGoogleLoginPromiseCallbacks(null);
       }
     },
-    onError: (errorResponse) => { // errorResponse can be an object with an error field
+    onError: (errorResponse) => {
       console.error('Google login hook error:', errorResponse);
       googleLoginPromiseCallbacks?.resolve(false);
       setGoogleLoginPromiseCallbacks(null);
     },
-    flow: 'implicit', // Requesting id_token directly (Implicit Flow).
-                      // Note: Google has deprecated the implicit flow for new projects.
-                      // Authorization Code Flow with PKCE is preferred.
-                      // This might require backend changes if a 'code' is sent instead of 'idToken'.
   });
 
   const signInWithGoogle = (): Promise<boolean> => {
@@ -163,15 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signInWithGoogle, // Expose the new function
   };
 
-  // It's important that GoogleOAuthProvider wraps AuthContext.Provider
-  // if AuthContext itself needs to trigger Google login,
-  // but here AuthContext only processes the token.
-  // The component calling signInWithGoogle will use useGoogleLogin hook,
-  // which needs to be under GoogleOAuthProvider.
-  // So, wrapping AuthProvider's children is the correct placement.
   return (
-    <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID_PLACEHOLDER'}>
-      <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-    </GoogleOAuthProvider>
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
   );
 };
