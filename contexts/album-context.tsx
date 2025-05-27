@@ -283,51 +283,160 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const addTemplate = (template: LayoutTemplate) => {
-    setTemplates((prev) => {
-      const newTemplates = [...prev, template];
-      
-      if (typeof window !== "undefined") {
-        const userTemplates = newTemplates.filter(t => !t.id.startsWith('server-'));
-        const storageKey = getStorageKey('templates');
-        localStorage.setItem(storageKey, JSON.stringify(userTemplates));
+  const addTemplate = async (template: LayoutTemplate) => {
+    if (user && user.role === "admin") {
+      try {
+        const response = await fetch("/api/layouts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: template.name,
+            config: {
+              photoCount: template.photoCount,
+              orientation: template.orientation,
+              layouts: template.layouts,
+            },
+          }),
+        })
+
+        if (response.ok) {
+          const apiResponse = await response.json()
+          const newServerTemplate: LayoutTemplate = {
+            ...template,
+            id: `server-${apiResponse.id}`,
+          }
+          setTemplates((prev) => [...prev, newServerTemplate])
+          // Admin templates are not saved to local storage
+        } else {
+          console.error("Failed to save template to server:", await response.text())
+          // Optionally, handle server error (e.g., show a notification to the admin)
+        }
+      } catch (error) {
+        console.error("Error saving template to server:", error)
+        // Optionally, handle network error
       }
-      
-      return newTemplates;
-    });
+    } else {
+      // Non-admin users: save to local storage
+      setTemplates((prev) => {
+        // Ensure the template ID for non-admins doesn't accidentally start with server-
+        // This could happen if a non-admin somehow submits a template with such an ID.
+        const newTemplate = {
+          ...template,
+          id: template.id.startsWith('server-') ? `user-${Date.now()}-${Math.random()}` : template.id
+        };
+        const newTemplates = [...prev, newTemplate];
+
+        if (typeof window !== "undefined") {
+          const userTemplates = newTemplates.filter(t => !t.id.startsWith('server-'));
+          const storageKey = getStorageKey('templates');
+          localStorage.setItem(storageKey, JSON.stringify(userTemplates));
+        }
+        return newTemplates;
+      });
+    }
   }
 
-  const updateTemplate = (template: LayoutTemplate) => {
-    setTemplates((prev) => {
-      const newTemplates = prev.map(t => t.id === template.id ? template : t);
-      
-      if (typeof window !== "undefined") {
-        const userTemplates = newTemplates.filter(t => !t.id.startsWith('server-'));
-        const storageKey = getStorageKey('templates');
-        localStorage.setItem(storageKey, JSON.stringify(userTemplates));
+  const updateTemplate = async (template: LayoutTemplate) => {
+    if (user && user.role === "admin" && template.id.startsWith("server-")) {
+      const numericIdString = template.id.split("server-")[1]
+      const numericId = parseInt(numericIdString, 10)
+
+      if (isNaN(numericId)) {
+        console.error("Invalid server template ID for update:", template.id)
+        return // Or handle error appropriately
       }
-      
-      return newTemplates;
-    });
+
+      try {
+        const response = await fetch(`/api/layouts`, { // As per prompt, PUT to /api/layouts
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: numericId, // numeric ID in body
+            name: template.name,
+            config: {
+              photoCount: template.photoCount,
+              orientation: template.orientation,
+              layouts: template.layouts,
+            },
+          }),
+        })
+
+        if (response.ok) {
+          // const updatedServerTemplate = await response.json(); // API might return the updated template
+          setTemplates((prev) =>
+            prev.map((t) => (t.id === template.id ? { ...template /*, id: `server-${updatedServerTemplate.id}` if ID can change */ } : t)),
+          )
+          // Server-managed templates are not saved to local storage by admin actions
+        } else {
+          console.error("Failed to update template on server:", await response.text())
+          // Optionally, handle server error (e.g., show a notification to the admin)
+        }
+      } catch (error) {
+        console.error("Error updating template on server:", error)
+        // Optionally, handle network error
+      }
+    } else {
+      // Non-admin users or user-specific templates: update in state and local storage
+      setTemplates((prev) => {
+        const newTemplates = prev.map((t) => (t.id === template.id ? template : t))
+
+        if (typeof window !== "undefined" && !template.id.startsWith("server-")) {
+          // Only save to localStorage if it's a user template
+          const userTemplates = newTemplates.filter(t => !t.id.startsWith('server-'));
+          const storageKey = getStorageKey('templates');
+          localStorage.setItem(storageKey, JSON.stringify(userTemplates));
+        }
+        return newTemplates
+      })
+    }
   }
 
   // %%%%%LAST%%%%%
-  const deleteTemplate = (templateId: string) => {
-    if (templateId.startsWith('server-')) {
-      return;
-    }
-    
-    setTemplates((prev) => {
-      const newTemplates = prev.filter((t) => t.id !== templateId);
-      
-      if (typeof window !== "undefined") {
-        const userTemplates = newTemplates.filter(t => !t.id.startsWith('server-'));
-        const storageKey = getStorageKey('templates');
-        localStorage.setItem(storageKey, JSON.stringify(userTemplates));
+  const deleteTemplate = async (templateId: string) => {
+    if (user && user.role === "admin" && templateId.startsWith("server-")) {
+      const numericIdString = templateId.split("server-")[1]
+      const numericId = parseInt(numericIdString, 10)
+
+      if (isNaN(numericId)) {
+        console.error("Invalid server template ID for delete:", templateId)
+        return // Or handle error appropriately
       }
-      
-      return newTemplates;
-    });
+
+      try {
+        const response = await fetch(`/api/layouts?id=${numericId}`, {
+          method: "DELETE",
+        })
+
+        if (response.ok) {
+          setTemplates((prev) => prev.filter((t) => t.id !== templateId))
+          // Server-managed templates are not manipulated in local storage by admin actions
+        } else {
+          console.error("Failed to delete template from server:", await response.text())
+          // Optionally, handle server error (e.g., show a notification to the admin)
+        }
+      } catch (error) {
+        console.error("Error deleting template from server:", error)
+        // Optionally, handle network error
+      }
+    } else {
+      // For non-admins, or for user-specific templates (even if admin is deleting their own local template)
+      setTemplates((prev) => {
+        const newTemplates = prev.filter((t) => t.id !== templateId)
+
+        if (typeof window !== "undefined" && !templateId.startsWith("server-")) {
+          // Only update local storage if it's a user-specific template being deleted.
+          // Server templates (even if removed from local view for non-admins) should not affect user template storage.
+          const userOnlyTemplates = newTemplates.filter(t => !t.id.startsWith('server-'));
+          const storageKey = getStorageKey('templates');
+          localStorage.setItem(storageKey, JSON.stringify(userOnlyTemplates));
+        }
+        return newTemplates
+      })
+    }
   }
 
   React.useEffect(() => {
@@ -338,14 +447,35 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         const storageKey = getStorageKey('templates');
         const saved = localStorage.getItem(storageKey);
         
-        let userLayouts = [...defaultTemplates];
-        
+        let userLayouts: LayoutTemplate[];
+
         if (saved) {
           try {
-            userLayouts = JSON.parse(saved);
+            const parsedSavedLayouts = JSON.parse(saved) as LayoutTemplate[];
+            if (Array.isArray(parsedSavedLayouts)) {
+              const filteredUserLayouts = parsedSavedLayouts.filter(
+                (t: LayoutTemplate) => t.id && !t.id.toString().startsWith('server-')
+              );
+              // If local storage existed but contained no valid user-specific templates (empty or only server-like ones),
+              // then fall back to default templates.
+              if (filteredUserLayouts.length > 0) {
+                userLayouts = filteredUserLayouts;
+              } else {
+                userLayouts = [...defaultTemplates];
+              }
+            } else {
+              // Parsed data is not an array, fallback to defaults
+              console.error('Saved templates format is not an array:', parsedSavedLayouts);
+              userLayouts = [...defaultTemplates];
+            }
           } catch (error) {
             console.error('템플릿 파싱 실패:', error);
+            // If parsing fails, use default templates
+            userLayouts = [...defaultTemplates];
           }
+        } else {
+          // No saved data in local storage, use default templates
+          userLayouts = [...defaultTemplates];
         }
         
         const allTemplates = [...serverLayouts, ...userLayouts];
