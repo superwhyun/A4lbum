@@ -10,9 +10,12 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
+    password TEXT,
     role TEXT DEFAULT 'user',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    google_id TEXT UNIQUE,
+    email TEXT,
+    profile_image_url TEXT
   )
 `);
 
@@ -41,9 +44,42 @@ const initializeAdmin = () => {
 initializeAdmin();
 
 // 사용자 관련 함수들
-export const createUser = (username: string, password: string) => {
-  const hashedPassword = bcrypt.hashSync(password, 10);
-  return db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run(username, hashedPassword);
+export const createUser = (
+  username: string,
+  password?: string | null,
+  googleId?: string | null,
+  email?: string | null,
+  profileImageUrl?: string | null
+) => {
+  const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
+  return db.prepare(
+    'INSERT INTO users (username, password, google_id, email, profile_image_url) VALUES (?, ?, ?, ?, ?)'
+  ).run(username, hashedPassword, googleId, email, profileImageUrl);
+};
+
+export const getUserByGoogleId = (googleId: string) => {
+  return db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId);
+};
+
+export const findOrCreateUserByGoogleId = (
+  googleId: string,
+  email: string,
+  username: string,
+  profileImageUrl?: string
+) => {
+  let user = getUserByGoogleId(googleId);
+  if (user) {
+    return user;
+  } else {
+    const createResult = createUser(username, null, googleId, email, profileImageUrl);
+    if (createResult.lastInsertRowid) {
+      return db.prepare('SELECT * FROM users WHERE id = ?').get(createResult.lastInsertRowid);
+    }
+    // Fallback if lastInsertRowid is not available (should not happen with AUTOINCREMENT PK)
+    // or if there was an issue with the insert not returning it (e.g. UNIQUE constraint violation)
+    // A more robust error handling might be needed here depending on application logic.
+    return getUserByGoogleId(googleId); // Attempt to fetch by googleId as a fallback
+  }
 };
 
 export const getUserByUsername = (username: string) => {
