@@ -1,18 +1,26 @@
 // lib/database-postgres.ts
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import { DatabaseAdapter, User, Layout } from './database-types';
 
 export class PostgresAdapter implements DatabaseAdapter {
+  private pool: Pool;
+
   constructor() {
-    // Vercel Postgres는 자동으로 연결됨
+    this.pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    });
+    
     this.initializeTables();
   }
 
   private async initializeTables() {
     try {
+      const client = await this.pool.connect();
+      
       // Users 테이블 생성
-      await sql`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           username VARCHAR(255) UNIQUE NOT NULL,
@@ -23,10 +31,10 @@ export class PostgresAdapter implements DatabaseAdapter {
           email VARCHAR(255),
           profile_image_url TEXT
         )
-      `;
+      `);
 
       // Layouts 테이블 생성  
-      await sql`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS layouts (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
@@ -34,10 +42,13 @@ export class PostgresAdapter implements DatabaseAdapter {
           created_by INTEGER REFERENCES users(id),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-      `;
+      `);
 
+      client.release();
+      
       // 기본 관리자 계정 생성
       await this.initializeAdmin();
+      console.log('PostgreSQL tables initialized successfully');
     } catch (error) {
       console.error('Failed to initialize tables:', error);
     }
@@ -45,16 +56,19 @@ export class PostgresAdapter implements DatabaseAdapter {
 
   private async initializeAdmin() {
     try {
-      const result = await sql`SELECT * FROM users WHERE username = 'admin'`;
+      const client = await this.pool.connect();
+      const result = await client.query('SELECT * FROM users WHERE username = $1', ['admin']);
       
       if (result.rows.length === 0) {
         const hashedPassword = bcrypt.hashSync('admin', 10);
-        await sql`
-          INSERT INTO users (username, password, role) 
-          VALUES ('admin', ${hashedPassword}, 'admin')
-        `;
+        await client.query(
+          'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+          ['admin', hashedPassword, 'admin']
+        );
         console.log('Admin user created');
       }
+      
+      client.release();
     } catch (error) {
       console.error('Failed to initialize admin:', error);
     }
@@ -69,32 +83,41 @@ export class PostgresAdapter implements DatabaseAdapter {
   ) {
     const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
     
-    const result = await sql`
-      INSERT INTO users (username, password, google_id, email, profile_image_url)
-      VALUES (${username}, ${hashedPassword}, ${googleId}, ${email}, ${profileImageUrl})
-      RETURNING *
-    `;
-    
-    return result.rows[0];
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'INSERT INTO users (username, password, google_id, email, profile_image_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [username, hashedPassword, googleId, email, profileImageUrl]
+      );
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
   }
 
   async getUserByGoogleId(googleId: string): Promise<User | null> {
+    const client = await this.pool.connect();
     try {
-      const result = await sql`SELECT * FROM users WHERE google_id = ${googleId}`;
-      return result.rows[0] as User || null;
+      const result = await client.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
+      return result.rows[0] || null;
     } catch (error) {
       console.error('Failed to get user by Google ID:', error);
       return null;
+    } finally {
+      client.release();
     }
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
+    const client = await this.pool.connect();
     try {
-      const result = await sql`SELECT * FROM users WHERE username = ${username}`;
-      return result.rows[0] as User || null;
+      const result = await client.query('SELECT * FROM users WHERE username = $1', [username]);
+      return result.rows[0] || null;
     } catch (error) {
       console.error('Failed to get user by username:', error);
       return null;
+    } finally {
+      client.release();
     }
   }
 
@@ -123,30 +146,48 @@ export class PostgresAdapter implements DatabaseAdapter {
   }
 
   async saveLayout(name: string, config: string, userId: number) {
-    const result = await sql`
-      INSERT INTO layouts (name, config, created_by)
-      VALUES (${name}, ${config}, ${userId})
-      RETURNING *
-    `;
-    return result.rows[0];
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'INSERT INTO layouts (name, config, created_by) VALUES ($1, $2, $3) RETURNING *',
+        [name, config, userId]
+      );
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
   }
 
   async updateLayout(id: number, name: string, config: string) {
-    const result = await sql`
-      UPDATE layouts SET name = ${name}, config = ${config}
-      WHERE id = ${id}
-      RETURNING *
-    `;
-    return result.rows[0];
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'UPDATE layouts SET name = $1, config = $2 WHERE id = $3 RETURNING *',
+        [name, config, id]
+      );
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
   }
 
   async deleteLayout(id: number) {
-    const result = await sql`DELETE FROM layouts WHERE id = ${id} RETURNING *`;
-    return result.rows[0];
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query('DELETE FROM layouts WHERE id = $1 RETURNING *', [id]);
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
   }
 
   async getLayouts(): Promise<Layout[]> {
-    const result = await sql`SELECT * FROM layouts ORDER BY created_at DESC`;
-    return result.rows as Layout[];
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query('SELECT * FROM layouts ORDER BY created_at DESC');
+      return result.rows;
+    } finally {
+      client.release();
+    }
   }
 }
