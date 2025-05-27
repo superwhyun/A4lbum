@@ -5,6 +5,7 @@ import "./globals.css"
 import { AlbumProvider } from "@/contexts/album-context"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Header } from "@/components/header"
+import { GoogleOAuthProvider } from '@react-oauth/google'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,10 +23,12 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={inter.className}>
-        <AuthProvider>
-          <Header />
-          <AlbumProvider>{children}</AlbumProvider>
-        </AuthProvider>
+        <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''}>
+          <AuthProvider>
+            <Header />
+            <AlbumProvider>{children}</AlbumProvider>
+          </AuthProvider>
+        </GoogleOAuthProvider>
       </body>
     </html>
   )
