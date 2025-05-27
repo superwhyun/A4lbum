@@ -5,18 +5,26 @@ import { PostgresAdapter } from './database-postgres';
 
 // 환경별 데이터베이스 어댑터 선택
 const createDatabaseAdapter = (): DatabaseAdapter => {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  const isVercel = process.env.VERCEL_ENV;
+  // Vercel 환경 감지 방법들
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
+  const hasPostgresUrl = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('postgres');
   
-  // 로컬 개발환경에서는 SQLite 사용
-  if (isDevelopment && !isVercel) {
-    console.log('Using SQLite database for local development');
-    return new SQLiteAdapter();
-  } 
+  console.log('Environment check:', {
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL: process.env.VERCEL,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    hasPostgresUrl: !!hasPostgresUrl
+  });
   
-  // Vercel 환경에서는 Postgres 사용
-  console.log('Using Vercel Postgres database for production');
-  return new PostgresAdapter();
+  // Postgres 환경변수가 있으면 Postgres 사용 (Vercel/배포 환경)
+  if (hasPostgresUrl) {
+    console.log('Using PostgreSQL database (Neon) for production');
+    return new PostgresAdapter();
+  }
+  
+  // 그 외에는 SQLite 사용 (로컬 개발환경)
+  console.log('Using SQLite database for local development');
+  return new SQLiteAdapter();
 };
 
 // 데이터베이스 인스턴스 생성
