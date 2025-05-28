@@ -17,6 +17,10 @@ interface AlbumContextType {
   updateTemplate: (template: LayoutTemplate) => void
   deleteTemplate: (templateId: string) => void
   resetAlbum: () => void
+  uploadProgress: number
+  setUploadProgress: (value: number) => void
+  pdfProgress: number
+  setPdfProgress: (value: number) => void
 }
 
 const AlbumContext = createContext<AlbumContextType | undefined>(undefined)
@@ -25,6 +29,8 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [photos, setPhotos] = useState<Photo[]>([])
   const [album, setAlbum] = useState<Album | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [pdfProgress, setPdfProgress] = useState(0)
   
   // 서버에서 관리자 레이아웃 불러오기
   const loadServerLayouts = async () => {
@@ -98,8 +104,9 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   // %%%%%LAST%%%%%
   const addPhotos = async (files: File[]) => {
     const newPhotos: Photo[] = []
-
-    for (const file of files) {
+    setUploadProgress(0)
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
       const url = URL.createObjectURL(file)
       const img = new Image()
       await new Promise((resolve) => {
@@ -136,9 +143,11 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         thumbnailUrl,
       })
       URL.revokeObjectURL(url)
+      setUploadProgress(Math.round(((i + 1) / files.length) * 100))
     }
 
     setPhotos((prev) => [...prev, ...newPhotos])
+    setTimeout(() => setUploadProgress(0), 500)
   }
 
   const generateRandomLayout = (
@@ -508,6 +517,10 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         updateTemplate,
         deleteTemplate,
         resetAlbum,
+        uploadProgress,
+        setUploadProgress,
+        pdfProgress,
+        setPdfProgress,
       }}
     >
       {children}

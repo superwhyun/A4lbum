@@ -3,8 +3,22 @@ import type { Album, Photo, PhotoLayout, AlbumPage } from "@/types/album"
 import { A4_SIZE } from "@/types/album"
 
 /**
- * object-fit: cover, object-position (%)을 canvas crop에 반영
+ * 앨범 테마 이름을 PDF 배경색 hex로 매핑
  */
+const THEME_COLORS: Record<string, string> = {
+  classic: "#FEF3C7",
+  modern: "#F9FAFB",
+  vintage: "#FEF9C3",
+  minimal: "#FFFFFF",
+  colorful: "#F0ABFC", // 보라/핑크 계열
+  elegant: "#F3E8FF",
+  rustic: "#FFEDD5",
+  artistic: "#FCE7F3",
+  nature: "#DCFCE7",
+  urban: "#DBEAFE",
+  black: "#000000",
+};
+
 function drawCroppedImageToCanvas(
   img: HTMLImageElement,
   layout: PhotoLayout,
@@ -61,7 +75,11 @@ function drawCroppedImageToCanvas(
 /**
  * PDF로 앨범 내보내기 (고해상도, crop/position 반영)
  */
-export async function exportAlbumToPDF(album: Album, photosInput: Photo[] | Record<string, Photo>) {
+export async function exportAlbumToPDF(
+  album: Album,
+  photosInput: Photo[] | Record<string, Photo>,
+  onProgress?: (percent: number) => void
+) {
   console.log("exportAlbumToPDF called", { album, photosInput });
   // photosInput이 배열이 아니면 Object.values로 배열화
   const photos: Photo[] = Array.isArray(photosInput) ? photosInput : Object.values(photosInput)
@@ -77,11 +95,23 @@ export async function exportAlbumToPDF(album: Album, photosInput: Photo[] | Reco
   const pdfWidthPx = (album.orientation === "portrait" ? A4_SIZE.WIDTH : A4_SIZE.HEIGHT) * MM_TO_PX
   const pdfHeightPx = (album.orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH) * MM_TO_PX
 
-  for (let pageIdx = 0; pageIdx < album.pages.length; pageIdx++) {
+  const totalPages = album.pages.length
+  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
     const page = album.pages[pageIdx]
     console.log("PDF page", { pageIdx, page, layouts: page.layouts });
     // PDF 첫 페이지는 addPage 필요 없음
     if (pageIdx > 0) pdf.addPage()
+
+    // 테마 배경색 채우기
+    const themeColor = THEME_COLORS[album.theme] || "#FFFFFF"
+    pdf.setFillColor(themeColor)
+    pdf.rect(
+      0,
+      0,
+      album.orientation === "portrait" ? A4_SIZE.WIDTH : A4_SIZE.HEIGHT,
+      album.orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH,
+      "F"
+    )
 
     // 각 프레임(사진)마다 crop/resize해서 PDF에 addImage
     for (const layout of page.layouts) {
@@ -172,9 +202,15 @@ export async function exportAlbumToPDF(album: Album, photosInput: Photo[] | Reco
         pdfFrameH
       )
     }
+    if (onProgress) {
+      onProgress(Math.round(((pageIdx + 1) / totalPages) * 100))
+    }
   }
 
   // PDF 다운로드
   const fileName = `album-${new Date().toISOString().split("T")[0]}.pdf`
   pdf.save(fileName)
+  if (onProgress) {
+    setTimeout(() => onProgress(0), 500)
+  }
 }

@@ -5,10 +5,11 @@ import type React from "react"
 import { useCallback, useState } from "react"
 import { Upload } from "lucide-react"
 import { useAlbum } from "@/contexts/album-context"
+import { Progress } from "@/components/ui/progress"
 
 export function PhotoDropzone() {
   const [isDragOver, setIsDragOver] = useState(false)
-  const { addPhotos } = useAlbum()
+  const { addPhotos, uploadProgress } = useAlbum()
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -53,6 +54,12 @@ export function PhotoDropzone() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
+      {uploadProgress > 0 && (
+        <div className="mb-4">
+          <Progress value={uploadProgress} />
+          <div className="text-xs text-gray-500 mt-1">{uploadProgress}%</div>
+        </div>
+      )}
       <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
       <p className="text-lg font-medium text-gray-900 mb-2">사진을 드래그하여 업로드하세요</p>
       <p className="text-sm text-gray-500 mb-4">또는 클릭하여 파일을 선택하세요</p>

@@ -34,6 +34,7 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
       artistic: "bg-pink-50 border-pink-200",
       nature: "bg-green-50 border-green-200",
       urban: "bg-blue-50 border-blue-200",
+      black: "bg-black border-gray-900 text-white",
     }
     return styles[theme as keyof typeof styles] || styles.classic
   }

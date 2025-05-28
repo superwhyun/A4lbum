@@ -23,7 +23,9 @@ export function PhotoFrame({ layout, photo, editMode, pageId, isSelected, onLayo
 
   // 미리보기 URL 동적 생성 및 해제
   React.useEffect(() => {
-    if (photo.file) {
+    if (photo.thumbnailUrl) {
+      setPreviewUrl(photo.thumbnailUrl)
+    } else if (photo.file) {
       const url = URL.createObjectURL(photo.file)
       setPreviewUrl(url)
       return () => {
@@ -34,7 +36,7 @@ export function PhotoFrame({ layout, photo, editMode, pageId, isSelected, onLayo
     } else {
       setPreviewUrl("/placeholder.svg")
     }
-  }, [photo.file, photo.url])
+  }, [photo.thumbnailUrl, photo.file, photo.url])
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {

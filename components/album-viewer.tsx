@@ -6,14 +6,16 @@ import { useAlbum } from "@/contexts/album-context"
 import { Button } from "@/components/ui/button"
 import { AlbumPage } from "./album-page"
 import { exportAlbumToPDF } from "@/utils/pdf-export"
+import { Progress } from "@/components/ui/progress"
 
 export function AlbumViewer() {
-  const { album, photos, swapPhotos, templates, updatePage } = useAlbum()
+  const { album, photos, swapPhotos, templates, updatePage, pdfProgress, setPdfProgress } = useAlbum()
   const [currentPage, setCurrentPage] = useState(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLDivElement | null)[]>([])
   const [editMode, setEditMode] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<{ layoutId: string; pageId: string } | null>(null)
+  const [showPdfModal, setShowPdfModal] = useState(false)
 
   if (!album || album.pages.length === 0) {
     return (
@@ -67,16 +69,27 @@ export function AlbumViewer() {
   const handleDownloadPDF = async () => {
     if (!album) return
 
+    setShowPdfModal(true)
     try {
-      await exportAlbumToPDF(album, photos)
+      await exportAlbumToPDF(album, photos, setPdfProgress)
     } catch (error) {
       console.error("PDF 생성 중 오류:", error)
       alert("PDF 생성 중 오류가 발생했습니다.")
     }
+    setShowPdfModal(false)
   }
 
   return (
     <div className="space-y-4">
+      {showPdfModal && pdfProgress > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center min-w-[300px]">
+            <div className="mb-4 text-lg font-semibold">PDF 변환 중...</div>
+            <Progress value={pdfProgress} />
+            <div className="text-xs text-gray-500 mt-2">{pdfProgress}%</div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">
           앨범 미리보기 ({currentPage + 1} / {album.pages.length})

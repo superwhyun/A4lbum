@@ -50,6 +50,7 @@ export const THEMES = [
   "artistic",
   "nature",
   "urban",
+  "black",
 ] as const
 
 export type Theme = (typeof THEMES)[number]
