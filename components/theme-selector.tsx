@@ -20,6 +20,7 @@ export function ThemeSelector({ selectedTheme, onThemeChange }: ThemeSelectorPro
       artistic: "bg-pink-100 border-pink-300",
       nature: "bg-green-100 border-green-300",
       urban: "bg-blue-100 border-blue-300",
+      black: "bg-gray-900 border-gray-700 text-white", // Added black theme style
     }
     return colors[theme] || colors.classic
   }
