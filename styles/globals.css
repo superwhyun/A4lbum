@@ -89,6 +89,11 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    /* Default light theme styles */
+    @apply bg-white text-black;
+  }
+  .dark body {
+    /* Basic black theme */
+    @apply bg-black text-white;
   }
 }
