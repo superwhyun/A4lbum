@@ -5,6 +5,8 @@ export interface Photo {
   width: number
   height: number
   thumbnailUrl?: string
+  date?: string;
+  location?: string;
 }
 
 export interface PhotoLayout {
@@ -37,6 +39,8 @@ export interface LayoutTemplate {
   photoCount: number
   layouts: Omit<PhotoLayout, "photoId">[]
   orientation: "portrait" | "landscape"
+  metadataTextColor?: string;
+  metadataTextSize?: string;
 }
 
 export const THEMES = [
@@ -50,6 +54,7 @@ export const THEMES = [
   "artistic",
   "nature",
   "urban",
+  "black",
 ] as const
 
 export type Theme = (typeof THEMES)[number]

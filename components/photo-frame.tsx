@@ -13,9 +13,21 @@ interface PhotoFrameProps {
   isSelected: boolean
   onLayoutChange: (newLayout: Partial<PhotoLayout>) => void
   onPhotoSelect: (layoutId: string, pageId: string) => void
+  metadataTextColor?: string;
+  metadataTextSize?: string;
 }
 
-export function PhotoFrame({ layout, photo, editMode, pageId, isSelected, onLayoutChange, onPhotoSelect }: PhotoFrameProps) {
+export function PhotoFrame({ 
+  layout, 
+  photo, 
+  editMode, 
+  pageId, 
+  isSelected, 
+  onLayoutChange, 
+  onPhotoSelect,
+  metadataTextColor,
+  metadataTextSize 
+}: PhotoFrameProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const frameRef = useRef<HTMLDivElement>(null)
@@ -143,6 +155,16 @@ export function PhotoFrame({ layout, photo, editMode, pageId, isSelected, onLayo
           <div className="bg-white rounded px-2 py-1 text-xs shadow">
             {isSelected ? "선택됨 - 다른 사진 클릭" : "클릭하여 선택"}
           </div>
+        </div>
+      )}
+      {(photo.date || photo.location) && (
+        <div 
+          className={`absolute bottom-0 left-0 right-0 p-1.5 bg-black bg-opacity-60 pointer-events-none ${metadataTextSize || 'text-xs'}`}
+          style={{ color: metadataTextColor || '#FFFFFF' }}
+        >
+          {photo.date && <span>{photo.date}</span>}
+          {photo.date && photo.location && <span className="mx-1">|</span>}
+          {photo.location && <span>{photo.location}</span>}
         </div>
       )}
     </div>

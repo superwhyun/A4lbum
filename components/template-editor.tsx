@@ -14,6 +14,9 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
   const [photoCount, setPhotoCount] = useState(template?.photoCount || 3);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(template?.orientation || 'portrait');
   const [layouts, setLayouts] = useState<Omit<PhotoLayout, 'photoId'>[]>([]);
+  const [availableLayoutSamples, setAvailableLayoutSamples] = useState<Array<{ name: string, layouts: Omit<PhotoLayout, 'photoId'>[] }>>([]);
+  const [metadataTextColor, setMetadataTextColor] = useState(template?.metadataTextColor || '#FFFFFF');
+  const [metadataTextSize, setMetadataTextSize] = useState(template?.metadataTextSize || 'text-xs');
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -22,44 +25,251 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
   const [showGrid, setShowGrid] = useState(true);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  function generateDefaultLayouts(count: number, orient: 'portrait' | 'landscape'): Omit<PhotoLayout, 'photoId'>[] {
-    const layouts: Omit<PhotoLayout, 'photoId'>[] = [];
-    const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
-    const rows = Math.ceil(count / cols);
-    const cellWidth = 100 / cols - 1;
-    const cellHeight = 100 / rows - 1;
+  function generatePageLayoutSamples(count: number, orient: 'portrait' | 'landscape'): Array<{ name: string, layouts: Omit<PhotoLayout, 'photoId'>[] }> {
+    const samples: Array<{ name: string, layouts: Omit<PhotoLayout, 'photoId'>[] }> = [];
 
-    for (let i = 0; i < count; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      layouts.push({
-        id: `layout-${i}`,
-        x: col * (cellWidth + 1),
-        y: row * (cellHeight + 1),
-        width: cellWidth,
-        height: cellHeight,
-      });
+    // Helper to create unique IDs for layouts within a sample
+    const createLayouts = (coords: Array<Omit<PhotoLayout, 'id' | 'photoId'>>): Omit<PhotoLayout, 'photoId'>[] => {
+      return coords.map((coord, index) => ({
+        id: `layout-${index}`,
+        ...coord,
+      }));
+    };
+
+    if (count === 1) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Single - Full Frame",
+          layouts: createLayouts([{ x: 5, y: 5, width: 90, height: 90 }]),
+        });
+        samples.push({
+          name: "Portrait Single - Centered",
+          layouts: createLayouts([{ x: 15, y: 15, width: 70, height: 70 }]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Single - Full Frame",
+          layouts: createLayouts([{ x: 5, y: 5, width: 90, height: 90 }]),
+        });
+        samples.push({
+          name: "Landscape Single - Centered",
+          layouts: createLayouts([{ x: 15, y: 15, width: 70, height: 70 }]),
+        });
+      }
+    } else if (count === 2) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Duo - Top Bottom",
+          layouts: createLayouts([
+            { x: 10, y: 5, width: 80, height: 42.5 },
+            { x: 10, y: 52.5, width: 80, height: 42.5 },
+          ]),
+        });
+        samples.push({
+          name: "Portrait Duo - Side by Side (Narrow)",
+          layouts: createLayouts([
+            { x: 5, y: 10, width: 42.5, height: 80 },
+            { x: 52.5, y: 10, width: 42.5, height: 80 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Duo - Side by Side",
+          layouts: createLayouts([
+            { x: 5, y: 10, width: 42.5, height: 80 },
+            { x: 52.5, y: 10, width: 42.5, height: 80 },
+          ]),
+        });
+        samples.push({
+          name: "Landscape Duo - Top Bottom (Narrow)",
+          layouts: createLayouts([
+            { x: 10, y: 5, width: 80, height: 42.5 },
+            { x: 10, y: 52.5, width: 80, height: 42.5 },
+          ]),
+        });
+      }
+    } else if (count === 3) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Trio - Stacked",
+          layouts: createLayouts([
+            { x: 10, y: 5, width: 80, height: 28 },
+            { x: 10, y: 36, width: 80, height: 28 },
+            { x: 10, y: 67, width: 80, height: 28 },
+          ]),
+        });
+        samples.push({
+          name: "Portrait Trio - One Large Two Small",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 90, height: 55 },
+            { x: 5, y: 62.5, width: 42.5, height: 32.5 },
+            { x: 52.5, y: 62.5, width: 42.5, height: 32.5 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Trio - Columned",
+          layouts: createLayouts([
+            { x: 5, y: 10, width: 28, height: 80 },
+            { x: 36, y: 10, width: 28, height: 80 },
+            { x: 67, y: 10, width: 28, height: 80 },
+          ]),
+        });
+        samples.push({
+          name: "Landscape Trio - One Large Two Small",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 55, height: 90 },
+            { x: 62.5, y: 5, width: 32.5, height: 42.5 },
+            { x: 62.5, y: 52.5, width: 32.5, height: 42.5 },
+          ]),
+        });
+      }
+    } else if (count === 4) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Quad - 2x2 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 42.5, height: 42.5 }, { x: 52.5, y: 5, width: 42.5, height: 42.5 },
+            { x: 5, y: 52.5, width: 42.5, height: 42.5 }, { x: 52.5, y: 52.5, width: 42.5, height: 42.5 },
+          ]),
+        });
+        samples.push({
+          name: "Portrait Quad - Vertical Stack",
+          layouts: createLayouts([
+            { x: 10, y: 2, width: 80, height: 22 }, { x: 10, y: 26, width: 80, height: 22 },
+            { x: 10, y: 50, width: 80, height: 22 }, { x: 10, y: 74, width: 80, height: 22 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Quad - 2x2 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 42.5, height: 42.5 }, { x: 52.5, y: 5, width: 42.5, height: 42.5 },
+            { x: 5, y: 52.5, width: 42.5, height: 42.5 }, { x: 52.5, y: 52.5, width: 42.5, height: 42.5 },
+          ]),
+        });
+        samples.push({
+          name: "Landscape Quad - Horizontal Strip",
+          layouts: createLayouts([
+            { x: 2, y: 10, width: 22, height: 80 }, { x: 26, y: 10, width: 22, height: 80 },
+            { x: 50, y: 10, width: 22, height: 80 }, { x: 74, y: 10, width: 22, height: 80 },
+          ]),
+        });
+      }
+    } else if (count === 5) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Quint - 1 Large, 4 Small",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 90, height: 45 },
+            { x: 5, y: 52.5, width: 21, height: 21 }, { x: 28.5, y: 52.5, width: 21, height: 21 },
+            { x: 52, y: 52.5, width: 21, height: 21 }, { x: 75.5, y: 52.5, width: 21, height: 21 },
+          ]),
+        });
+        samples.push({
+          name: "Portrait Quint - Vertical Center + Sides",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 28, height: 90 },
+            { x: 36, y: 5, width: 28, height: 42.5 }, { x: 36, y: 52.5, width: 28, height: 42.5 },
+            { x: 67, y: 5, width: 28, height: 42.5 }, { x: 67, y: 52.5, width: 28, height: 42.5 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Quint - 1 Large, 4 Small",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 45, height: 90 },
+            { x: 52.5, y: 5, width: 21, height: 21 }, { x: 75.5, y: 5, width: 21, height: 21 },
+            { x: 52.5, y: 28.5, width: 21, height: 21 }, { x: 75.5, y: 28.5, width: 21, height: 21 },
+          ]),
+        });
+         samples.push({
+          name: "Landscape Quint - Horizontal Center + Top/Bottom",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 90, height: 28 },
+            { x: 5, y: 36, width: 42.5, height: 28 }, { x: 52.5, y: 36, width: 42.5, height: 28 },
+            { x: 5, y: 67, width: 42.5, height: 28 }, { x: 52.5, y: 67, width: 42.5, height: 28 },
+          ]),
+        });
+      }
+    } else if (count === 6) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Hex - 2x3 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 42.5, height: 28 }, { x: 52.5, y: 5, width: 42.5, height: 28 },
+            { x: 5, y: 36, width: 42.5, height: 28 }, { x: 52.5, y: 36, width: 42.5, height: 28 },
+            { x: 5, y: 67, width: 42.5, height: 28 }, { x: 52.5, y: 67, width: 42.5, height: 28 },
+          ]),
+        });
+        samples.push({
+          name: "Portrait Hex - 3x2 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 28, height: 42.5 }, { x: 36, y: 5, width: 28, height: 42.5 }, { x: 67, y: 5, width: 28, height: 42.5 },
+            { x: 5, y: 52.5, width: 28, height: 42.5 }, { x: 36, y: 52.5, width: 28, height: 42.5 }, { x: 67, y: 52.5, width: 28, height: 42.5 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Hex - 3x2 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 28, height: 42.5 }, { x: 36, y: 5, width: 28, height: 42.5 }, { x: 67, y: 5, width: 28, height: 42.5 },
+            { x: 5, y: 52.5, width: 28, height: 42.5 }, { x: 36, y: 52.5, width: 28, height: 42.5 }, { x: 67, y: 52.5, width: 28, height: 42.5 },
+          ]),
+        });
+        samples.push({
+          name: "Landscape Hex - 2x3 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 42.5, height: 28 }, { x: 52.5, y: 5, width: 42.5, height: 28 },
+            { x: 5, y: 36, width: 42.5, height: 28 }, { x: 52.5, y: 36, width: 42.5, height: 28 },
+            { x: 5, y: 67, width: 42.5, height: 28 }, { x: 52.5, y: 67, width: 42.5, height: 28 },
+          ]),
+        });
+      }
     }
-    return layouts;
+
+    return samples;
   }
 
   // 초기 레이아웃 설정
   useEffect(() => {
     if (template?.layouts) {
       setLayouts(template.layouts);
+      // If we have a template, we might want to generate samples based on its count and orientation
+      // or assume the template itself is one of the 'samples'
+      const samples = generatePageLayoutSamples(template.photoCount, template.orientation);
+      setAvailableLayoutSamples(samples);
     } else {
-      setLayouts(generateDefaultLayouts(photoCount, orientation));
+      const samples = generatePageLayoutSamples(photoCount, orientation);
+      setAvailableLayoutSamples(samples);
+      if (samples.length > 0) {
+        setLayouts(samples[0].layouts);
+      } else {
+        setLayouts([]); // Fallback to empty if no samples
+      }
     }
-  }, [template]);
+  }, [template, photoCount, orientation]); // Added photoCount and orientation to dependencies
 
   const handlePhotoCountChange = (newCount: number) => {
     setPhotoCount(newCount);
-    setLayouts(generateDefaultLayouts(newCount, orientation));
+    const samples = generatePageLayoutSamples(newCount, orientation);
+    setAvailableLayoutSamples(samples);
+    if (samples.length > 0) {
+      setLayouts(samples[0].layouts);
+    } else {
+      setLayouts([]); // Fallback to empty if no samples
+    }
   };
 
   const handleOrientationChange = (newOrientation: 'portrait' | 'landscape') => {
     setOrientation(newOrientation);
-    setLayouts(generateDefaultLayouts(photoCount, newOrientation));
+    const samples = generatePageLayoutSamples(photoCount, newOrientation);
+    setAvailableLayoutSamples(samples);
+    if (samples.length > 0) {
+      setLayouts(samples[0].layouts);
+    } else {
+      setLayouts([]); // Fallback to empty if no samples
+    }
   };
 
   const handleLayoutMouseDown = useCallback((e: React.MouseEvent, layoutId: string) => {
@@ -161,6 +371,8 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
       photoCount,
       orientation,
       layouts,
+      metadataTextColor,
+      metadataTextSize,
     };
 
     onSave(newTemplate);
@@ -220,6 +432,30 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
               className="rounded"
             />
             <label htmlFor="showGrid" className="text-sm text-gray-700">그리드 표시</label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">메타데이터 텍스트 색상</label>
+            <input
+              type="color"
+              value={metadataTextColor}
+              onChange={(e) => setMetadataTextColor(e.target.value)}
+              className="w-full h-10 px-1 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">메타데이터 텍스트 크기</label>
+            <select
+              value={metadataTextSize}
+              onChange={(e) => setMetadataTextSize(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="text-xs">Extra Small</option>
+              <option value="text-sm">Small</option>
+              <option value="text-base">Medium</option>
+              <option value="text-lg">Large</option>
+            </select>
           </div>
         </div>
 
