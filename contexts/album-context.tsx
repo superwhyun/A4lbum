@@ -214,6 +214,36 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     const pages: AlbumPage[] = []
     let remainingPhotos = [...photos]
 
+    // 첫 페이지는 표지 페이지로 생성 (사진 1장으로 전체 꽉 채움)
+    if (remainingPhotos.length > 0) {
+      const coverPhoto = remainingPhotos.shift()!
+      const coverLayout: PhotoLayout = {
+        id: "cover-layout",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        photoId: coverPhoto.id,
+        photoX: 50,
+        photoY: 50,
+      }
+
+      // 기본 타이틀: 사진 촬영 날짜 (YYYY.MM 형식)
+      const getDefaultTitle = () => {
+        const now = new Date()
+        return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.`
+      }
+
+      pages.push({
+        id: `page-${Date.now()}-cover`,
+        layouts: [coverLayout],
+        isCoverPage: true,
+        title: getDefaultTitle(),
+        titlePosition: { x: 50, y: 85 }, // 기본 위치: 하단 중앙
+      })
+    }
+
+    // 나머지 페이지들은 기존 로직대로 생성
     while (remainingPhotos.length > 0) {
       const photosPerPage = Math.min(3 + Math.floor(Math.random() * 4), remainingPhotos.length)
       const pagePhotos = remainingPhotos.splice(0, photosPerPage)
@@ -284,12 +314,14 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     setAlbum(newAlbum)
   }
 
-  const updatePage = (pageId: string, layouts: PhotoLayout[]) => {
+  const updatePage = (pageId: string, layouts: PhotoLayout[], pageUpdates?: Partial<AlbumPage>) => {
     if (!album) return
 
     setAlbum((prev) => ({
       ...prev!,
-      pages: prev!.pages.map((page) => (page.id === pageId ? { ...page, layouts } : page)),
+      pages: prev!.pages.map((page) => 
+        page.id === pageId ? { ...page, layouts, ...pageUpdates } : page
+      ),
     }))
   }
 

@@ -19,6 +19,20 @@ const THEME_COLORS: Record<string, string> = {
   black: "#000000",
 };
 
+const THEME_TEXT_COLORS: Record<string, string> = {
+  classic: "#1F2937",
+  modern: "#1F2937",
+  vintage: "#1F2937",
+  minimal: "#1F2937",
+  colorful: "#1F2937",
+  elegant: "#1F2937",
+  rustic: "#1F2937",
+  artistic: "#1F2937",
+  nature: "#1F2937",
+  urban: "#1F2937",
+  black: "#FFFFFF",
+};
+
 function drawCroppedImageToCanvas(
   img: HTMLImageElement,
   layout: PhotoLayout,
@@ -70,6 +84,97 @@ function drawCroppedImageToCanvas(
   )
 
   return canvas
+}
+
+/**
+ * 텍스트를 Canvas에 렌더링하여 이미지로 변환
+ */
+function createTextImage(
+  text: string,
+  textColor: string,
+  fontSize: number = 24
+): { imageData: string; width: number; height: number } {
+  const canvas = document.createElement("canvas")
+  const ctx = canvas.getContext("2d")!
+  
+  // 폰트 설정
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+  ctx.fillStyle = textColor
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  
+  // 텍스트 크기 측정
+  const textMetrics = ctx.measureText(text)
+  const textWidth = textMetrics.width
+  const textHeight = fontSize * 1.2 // 대략적인 텍스트 높이
+  
+  // Canvas 크기 설정 (패딩 포함)
+  const padding = 10
+  canvas.width = textWidth + padding * 2
+  canvas.height = textHeight + padding * 2
+  
+  // 폰트 재설정 (canvas 크기 변경으로 리셋됨)
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+  ctx.fillStyle = textColor
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  
+  // 텍스트 그림자 효과 (가독성 향상)
+  ctx.shadowColor = textColor === "#FFFFFF" ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.3)"
+  ctx.shadowBlur = 2
+  ctx.shadowOffsetX = 1
+  ctx.shadowOffsetY = 1
+  
+  // 텍스트 렌더링
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2)
+  
+  // PNG로 변환 (투명 배경 유지)
+  return {
+    imageData: canvas.toDataURL("image/png"),
+    width: canvas.width,
+    height: canvas.height
+  }
+}
+
+/**
+ * PDF에 타이틀 텍스트를 이미지로 렌더링
+ */
+function renderTitleToPDF(
+  pdf: jsPDF,
+  page: AlbumPage,
+  theme: string,
+  orientation: "portrait" | "landscape"
+) {
+  if (!page.title || !page.titlePosition) return
+
+  const { title, titlePosition } = page
+  const textColor = THEME_TEXT_COLORS[theme] || "#1F2937"
+  
+  // 위치 좌표 변환 (% → mm)
+  const pageWidth = orientation === "portrait" ? A4_SIZE.WIDTH : A4_SIZE.HEIGHT
+  const pageHeight = orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH
+  
+  const titleX = (titlePosition.x / 100) * pageWidth
+  const titleY = (titlePosition.y / 100) * pageHeight
+  
+  // 텍스트를 이미지로 변환 (크기 2배)
+  const textImage = createTextImage(title, textColor, 48)
+  
+  // 실제 Canvas 크기를 기반으로 PDF 크기 계산
+  // px → mm 변환 (96 DPI 기준: 1 inch = 25.4mm, 96px = 25.4mm)
+  const PX_TO_MM = 25.4 / 96
+  const pdfWidth = textImage.width * PX_TO_MM
+  const pdfHeight = textImage.height * PX_TO_MM
+  
+  // PDF에 이미지 삽입 (중앙 정렬)
+  pdf.addImage(
+    textImage.imageData,
+    "PNG",
+    titleX - pdfWidth / 2,
+    titleY - pdfHeight / 2,
+    pdfWidth,
+    pdfHeight
+  )
 }
 
 /**
@@ -202,6 +307,10 @@ export async function exportAlbumToPDF(
         pdfFrameH
       )
     }
+
+    // 타이틀 렌더링 (표지 페이지나 타이틀이 있는 페이지)
+    renderTitleToPDF(pdf, page, album.theme, album.orientation)
+
     if (onProgress) {
       onProgress(Math.round(((pageIdx + 1) / totalPages) * 100))
     }

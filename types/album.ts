@@ -24,6 +24,9 @@ export interface AlbumPage {
   id: string
   layouts: PhotoLayout[]
   templateId?: string
+  isCoverPage?: boolean
+  title?: string
+  titlePosition?: { x: number; y: number }
 }
 
 export interface Album {

@@ -4,6 +4,7 @@ import { useState } from "react"
 import type { Photo, AlbumPage as AlbumPageType, PhotoLayout } from "@/types/album"
 import { useAlbum } from "@/contexts/album-context"
 import { PhotoFrame } from "./photo-frame"
+import { TitleInput } from "./title-input"
 import { A4_SIZE } from "@/types/album"
 
 interface AlbumPageProps {
@@ -44,6 +45,14 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
     updatePage(page.id, updatedLayouts)
   }
 
+  const handleTitleChange = (newTitle: string) => {
+    updatePage(page.id, layouts, { title: newTitle })
+  }
+
+  const handleTitlePositionChange = (newPosition: { x: number; y: number }) => {
+    updatePage(page.id, layouts, { titlePosition: newPosition })
+  }
+
   // A4 비율과 여백 계산 - 상하좌우 동일한 여백
   const aspectRatio = orientation === "portrait" ? A4_SIZE.WIDTH / A4_SIZE.HEIGHT : A4_SIZE.HEIGHT / A4_SIZE.WIDTH
   const marginPercent = 8 // 8% 여백으로 증가
@@ -82,6 +91,18 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
             />
           )
         })}
+        
+        {/* 표지 페이지 타이틀 */}
+        {page.isCoverPage && (
+          <TitleInput
+            title={page.title || ""}
+            position={page.titlePosition || { x: 50, y: 85 }}
+            editMode={editMode}
+            theme={theme}
+            onTitleChange={handleTitleChange}
+            onPositionChange={handleTitlePositionChange}
+          />
+        )}
       </div>
     </div>
   )
