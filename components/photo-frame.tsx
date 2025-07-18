@@ -15,6 +15,7 @@ interface PhotoFrameProps {
   onPhotoSelect: (layoutId: string, pageId: string) => void
   metadataTextColor?: string;
   metadataTextSize?: string;
+  theme?: string;
 }
 
 export function PhotoFrame({ 
@@ -26,7 +27,8 @@ export function PhotoFrame({
   onLayoutChange, 
   onPhotoSelect,
   metadataTextColor,
-  metadataTextSize 
+  metadataTextSize,
+  theme 
 }: PhotoFrameProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
@@ -154,7 +156,11 @@ export function PhotoFrame({
       />
       {editMode && (
         <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center pointer-events-none">
-          <div className="bg-white rounded px-2 py-1 text-xs shadow">
+          <div className={`rounded px-2 py-1 text-xs shadow ${
+            theme === 'black' 
+              ? 'bg-gray-800 text-white border border-gray-600' 
+              : 'bg-white text-gray-900'
+          }`}>
             {isSelected ? "선택됨 - 다른 사진 클릭" : "클릭하여 선택"}
           </div>
         </div>

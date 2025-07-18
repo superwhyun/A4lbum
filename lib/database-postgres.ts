@@ -2,6 +2,7 @@
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import { DatabaseAdapter, User, Layout } from './database-types';
+import { defaultTemplates, serializeTemplate } from './default-templates';
 
 export class PostgresAdapter implements DatabaseAdapter {
   private pool: Pool;
@@ -48,9 +49,11 @@ export class PostgresAdapter implements DatabaseAdapter {
       
       // 기본 관리자 계정 생성
       await this.initializeAdmin();
-      console.log('PostgreSQL tables initialized successfully');
+      
+      // 기본 템플릿 초기화
+      await this.initializeTemplates();
     } catch (error) {
-      console.error('Failed to initialize tables:', error);
+      // 테이블 초기화 실패 시 무시
     }
   }
 
@@ -65,12 +68,46 @@ export class PostgresAdapter implements DatabaseAdapter {
           'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
           ['admin', hashedPassword, 'admin']
         );
-        console.log('Admin user created');
       }
       
       client.release();
     } catch (error) {
-      console.error('Failed to initialize admin:', error);
+      // 관리자 초기화 실패 시 무시
+    }
+  }
+
+  private async initializeTemplates() {
+    try {
+      const client = await this.pool.connect();
+      
+      // 기존 템플릿 개수 확인
+      const countResult = await client.query('SELECT COUNT(*) as count FROM layouts');
+      const existingTemplateCount = parseInt(countResult.rows[0].count);
+      
+      if (existingTemplateCount === 0) {
+        // 관리자 사용자 ID 조회
+        const adminResult = await client.query('SELECT id FROM users WHERE role = $1', ['admin']);
+        const adminUserId = adminResult.rows[0]?.id || 1;
+        
+        // 기본 템플릿 삽입
+        let insertedCount = 0;
+        for (const template of defaultTemplates) {
+          const serialized = serializeTemplate(template);
+          try {
+            await client.query(
+              'INSERT INTO layouts (name, config, created_by, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
+              [serialized.name, serialized.config, adminUserId]
+            );
+            insertedCount++;
+          } catch (error) {
+            // 템플릿 삽입 실패 시 에러는 무시
+          }
+        }
+      }
+      
+      client.release();
+    } catch (error) {
+      // 템플릿 초기화 실패 시 무시
     }
   }
 

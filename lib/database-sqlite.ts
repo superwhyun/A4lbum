@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import { DatabaseAdapter, User, Layout } from './database-types';
+import { defaultTemplates, serializeTemplate } from './default-templates';
 
 export class SQLiteAdapter implements DatabaseAdapter {
   private db: Database.Database;
@@ -12,6 +13,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     this.db = new Database(dbPath);
     this.initializeTables();
     this.initializeAdmin();
+    this.initializeTemplates();
   }
 
   private initializeTables() {
@@ -47,7 +49,39 @@ export class SQLiteAdapter implements DatabaseAdapter {
     if (!existingAdmin) {
       const hashedPassword = bcrypt.hashSync('admin', 10);
       this.db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run('admin', hashedPassword, 'admin');
-      console.log('Admin user created');
+    }
+  }
+
+  private initializeTemplates() {
+    // 기존 템플릿 개수 확인
+    const existingTemplateCount = this.db.prepare('SELECT COUNT(*) as count FROM layouts').get() as { count: number };
+    
+    if (existingTemplateCount.count === 0) {
+      // 관리자 사용자 ID 조회
+      const adminUser = this.db.prepare('SELECT id FROM users WHERE role = ?').get('admin') as { id: number } | null;
+      const adminUserId = adminUser?.id || 1;
+      
+      // 기본 템플릿 삽입
+      const insertStmt = this.db.prepare(`
+        INSERT INTO layouts (name, config, created_by, created_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `);
+      
+      const insertMany = this.db.transaction((templates) => {
+        let insertedCount = 0;
+        for (const template of templates) {
+          const serialized = serializeTemplate(template);
+          try {
+            insertStmt.run(serialized.name, serialized.config, adminUserId);
+            insertedCount++;
+          } catch (error) {
+            // 템플릿 삽입 실패 시 에러는 무시
+          }
+        }
+        return insertedCount;
+      });
+      
+      insertMany(defaultTemplates);
     }
   }
 

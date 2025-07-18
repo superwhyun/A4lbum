@@ -73,7 +73,7 @@ export default function TemplateGrid({ selectedPhotoCount, onEditTemplate }: Tem
                 {template.id.startsWith('server-') && (
                   <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">관리자</span>
                 )}
-                {!template.id.startsWith('server-') && (
+                {(!template.id.startsWith('server-') || user?.role === 'admin') && (
                   <button 
                     onClick={() => onEditTemplate(template)}
                     className="p-1 bg-white rounded shadow hover:bg-gray-50"
