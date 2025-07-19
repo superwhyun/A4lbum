@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ImageIcon } from 'lucide-react';
 import { useAlbum } from '@/contexts/album-context';
+import { useAuth } from '@/contexts/auth-context';
 import { LayoutTemplate } from '@/types/album';
 import LayoutSidebar from '@/components/layout-sidebar';
 import TemplateGrid from '@/components/template-grid';
@@ -15,6 +16,7 @@ export default function LayoutManagerPage() {
   const [editingTemplate, setEditingTemplate] = useState<LayoutTemplate | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const { addTemplate, updateTemplate } = useAlbum();
+  const { user } = useAuth();
 
   const handleCreateTemplate = () => {
     setEditingTemplate(null);
@@ -82,13 +84,15 @@ export default function LayoutManagerPage() {
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">레이아웃 템플릿 관리자</h1>
             <div className="flex space-x-3">
-              <button
-                onClick={handleInitializeTemplates}
-                disabled={isInitializing}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isInitializing ? '초기화 중...' : '템플릿 DB 초기화'}
-              </button>
+              {user?.role === 'admin' && (
+                <button
+                  onClick={handleInitializeTemplates}
+                  disabled={isInitializing}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isInitializing ? '초기화 중...' : '템플릿 DB 초기화'}
+                </button>
+              )}
               <button
                 onClick={handleCreateTemplate}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
