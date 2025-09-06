@@ -9,7 +9,7 @@ import { exportAlbumToPDF } from "@/utils/pdf-export"
 import { Progress } from "@/components/ui/progress"
 
 export function AlbumViewer() {
-  const { album, photos, swapPhotos, templates, updatePage, pdfProgress, setPdfProgress } = useAlbum()
+  const { album, photos, swapPhotos, templates, updatePage, insertPage, removeEmptyPages, pdfProgress, setPdfProgress } = useAlbum()
   const [currentPage, setCurrentPage] = useState(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -48,21 +48,117 @@ export function AlbumViewer() {
   }, [currentPage, album.pages.length])
 
   const handlePhotoSelect = (layoutId: string, pageId: string) => {
-    console.log('Photo selected:', { layoutId, pageId, currentSelected: selectedPhoto })
     
     if (selectedPhoto) {
-      // 이미 선택된 사진이 있으면 스위치
+      // 이미 선택된 사진/슬롯이 있으면 스위치
       if (selectedPhoto.layoutId !== layoutId || selectedPhoto.pageId !== pageId) {
-        console.log('Swapping photos:', {
-          from: selectedPhoto,
-          to: { layoutId, pageId }
-        })
+        
+        // 빈 슬롯과 사진 스와핑도 처리
         swapPhotos(selectedPhoto.layoutId, layoutId, selectedPhoto.pageId, pageId)
       }
       setSelectedPhoto(null)
     } else {
-      // 첫 번째 선택
+      // 첫 번째 선택 (빈 슬롯이든 사진이든 상관없이)
       setSelectedPhoto({ layoutId, pageId })
+    }
+  }
+
+  const handleLayoutChangeWithPhotoManagement = (
+    pageIndex: number,
+    page: any,
+    selectedTemplate: any
+  ) => {
+    const currentPhotoCount = page.layouts.length
+    const newPhotoCount = selectedTemplate.layouts.length
+    
+    // 기존 사진들을 순서대로 새 레이아웃에 매핑
+    const newLayouts = selectedTemplate.layouts.map((layout: any, idx: number) => ({
+      ...layout,
+      photoId: page.layouts[idx]?.photoId || "",
+      photoX: 50,
+      photoY: 50,
+    }))
+    
+    // 현재 페이지를 새로운 레이아웃으로 업데이트
+    updatePage(page.id, newLayouts, { templateId: selectedTemplate.id })
+    
+    // 사진이 남는 경우 (새 레이아웃의 사진 장수가 더 적은 경우)
+    if (currentPhotoCount > newPhotoCount) {
+      const remainingPhotos = page.layouts.slice(newPhotoCount)
+      
+      if (remainingPhotos.length > 0) {
+        // 남은 사진들로 새 페이지 생성
+        createNewPageWithRemainingPhotos(pageIndex, remainingPhotos)
+      }
+    }
+  }
+  
+  const createNewPageWithRemainingPhotos = (afterPageIndex: number, remainingLayouts: any[]) => {
+    if (!album || !templates) return
+    
+    // 남은 사진 수에 맞는 적절한 템플릿 찾기
+    const availableTemplates = templates.filter(
+      (t) => t.photoCount === remainingLayouts.length && t.orientation === album.orientation
+    )
+    
+    let selectedTemplate = availableTemplates[0]
+    
+    // 적절한 템플릿이 없으면 기본 레이아웃 생성
+    if (!selectedTemplate) {
+      selectedTemplate = generateDefaultTemplate(remainingLayouts.length, album.orientation)
+    }
+    
+    // 새 페이지의 레이아웃 생성
+    const newLayouts = selectedTemplate.layouts.map((layout: any, idx: number) => ({
+      ...layout,
+      photoId: remainingLayouts[idx]?.photoId || "",
+      photoX: remainingLayouts[idx]?.photoX || 50,
+      photoY: remainingLayouts[idx]?.photoY || 50,
+    }))
+    
+    // 새 페이지 생성
+    const newPage = {
+      id: `page-${Date.now()}-${Math.random()}`,
+      layouts: newLayouts,
+      templateId: selectedTemplate.id,
+    }
+    
+    // 현재 페이지 다음에 새 페이지 삽입
+    insertPage(afterPageIndex, newPage)
+    
+    // 새 페이지로 이동
+    setTimeout(() => {
+      setCurrentPage(afterPageIndex + 1)
+    }, 100)
+  }
+  
+  const generateDefaultTemplate = (photoCount: number, orientation: "portrait" | "landscape") => {
+    const layouts = []
+    const cols = Math.ceil(Math.sqrt(photoCount))
+    const rows = Math.ceil(photoCount / cols)
+    const cellWidth = (100 - (cols - 1) * 2) / cols
+    const cellHeight = (100 - (rows - 1) * 2) / rows
+    
+    for (let i = 0; i < photoCount; i++) {
+      const col = i % cols
+      const row = Math.floor(i / cols)
+      layouts.push({
+        id: `layout-${i}`,
+        x: col * (cellWidth + 2),
+        y: row * (cellHeight + 2),
+        width: cellWidth,
+        height: cellHeight,
+        photoX: 50,
+        photoY: 50,
+      })
+    }
+    
+    return {
+      id: `temp-${photoCount}-${orientation}`,
+      name: `${photoCount}장 ${orientation}`,
+      photoCount,
+      orientation,
+      layouts,
     }
   }
 
@@ -106,6 +202,27 @@ export function AlbumViewer() {
             <Edit className="w-4 h-4 mr-2" />
             {editMode ? "편집 완료" : "편집 모드"}
           </Button>
+          {editMode && (
+            <Button variant="outline" onClick={() => {
+              const result = removeEmptyPages()
+              if (result.removedPages.length > 0) {
+                // 현재 페이지 조정
+                const wasCurrentPageRemoved = result.removedIndices.includes(currentPage)
+                
+                if (wasCurrentPageRemoved) {
+                  const newCurrentPage = Math.max(0, Math.min(currentPage, result.newTotalPages - 1))
+                  setCurrentPage(newCurrentPage)
+                } else {
+                  const removedBeforeCurrent = result.removedIndices.filter(idx => idx < currentPage).length
+                  if (removedBeforeCurrent > 0) {
+                    setCurrentPage(currentPage - removedBeforeCurrent)
+                  }
+                }
+              }
+            }}>
+              🗑️ 빈 페이지 정리
+            </Button>
+          )}
         </div>
       </div>
 
@@ -113,14 +230,18 @@ export function AlbumViewer() {
         <div className="overflow-x-auto" ref={scrollContainerRef}>
           <div className="flex gap-4 pb-4" style={{ width: "max-content" }}>
             {album.pages.map((page, index) => {
-              // 편집 모드에서만, 해당 페이지의 사진 수와 orientation이 일치하는 템플릿 목록
-              const matchingTemplates = templates
-                ? templates.filter(
-                    (t) =>
-                      t.photoCount === page.layouts.length &&
-                      t.orientation === album.orientation
-                  )
+              // 편집 모드에서는 모든 해당 orientation의 템플릿 표시 (사진 장수 무관)
+              const availableTemplates = templates
+                ? templates.filter((t) => t.orientation === album.orientation)
                 : [];
+              
+              // 현재 페이지와 같은 사진 수의 템플릿과 다른 사진 수의 템플릿 분리
+              const sameCountTemplates = availableTemplates.filter(
+                (t) => t.photoCount === page.layouts.length
+              );
+              const differentCountTemplates = availableTemplates.filter(
+                (t) => t.photoCount !== page.layouts.length
+              );
               return (
                 <div
                   key={page.id}
@@ -141,23 +262,29 @@ export function AlbumViewer() {
                           const selectedId = e.target.value;
                           const selectedTemplate = templates.find((t) => t.id === selectedId);
                           if (selectedTemplate) {
-                            // 기존 photoId 순서대로 새 템플릿에 매핑
-                            const newLayouts = selectedTemplate.layouts.map((layout, idx) => ({
-                              ...layout,
-                              photoId: page.layouts[idx]?.photoId || "",
-                              photoX: 50,
-                              photoY: 50,
-                            }));
-                            updatePage(page.id, newLayouts);
+                            handleLayoutChangeWithPhotoManagement(index, page, selectedTemplate);
                           }
                         }}
                       >
                         <option value="">선택하세요</option>
-                        {matchingTemplates.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
+                        {sameCountTemplates.length > 0 && (
+                          <optgroup label={`현재와 동일 (${page.layouts.length}장)`}>
+                            {sameCountTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {differentCountTemplates.length > 0 && (
+                          <optgroup label="다른 장수 (새 페이지 생성)">
+                            {differentCountTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name} ({t.photoCount}장)
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </div>
                   )}

@@ -14,6 +14,8 @@ interface AlbumContextType {
   createAlbum: (theme: string, orientation: "portrait" | "landscape") => void
   updatePage: (pageId: string, layouts: PhotoLayout[]) => void
   swapPhotos: (sourceLayoutId: string, targetLayoutId: string, sourcePageId: string, targetPageId: string) => void
+  insertPage: (afterPageIndex: number, newPage: AlbumPage) => void
+  removeEmptyPages: () => { removedPages: string[], removedIndices: number[], newTotalPages: number }
   addTemplate: (template: LayoutTemplate) => void
   updateTemplate: (template: LayoutTemplate) => void
   deleteTemplate: (templateId: string) => void
@@ -337,6 +339,55 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     }))
   }
 
+  const insertPage = (afterPageIndex: number, newPage: AlbumPage) => {
+    if (!album) return
+
+    setAlbum((prev) => ({
+      ...prev!,
+      pages: [
+        ...prev!.pages.slice(0, afterPageIndex + 1),
+        newPage,
+        ...prev!.pages.slice(afterPageIndex + 1)
+      ]
+    }))
+  }
+
+  const removeEmptyPages = () => {
+    if (!album) return { removedPages: [], removedIndices: [], newTotalPages: 0 }
+
+    const removedPageIds: string[] = []
+    const removedIndices: number[] = []
+
+    const nonEmptyPages = album.pages.filter((page, index) => {
+      // 표지 페이지는 삭제하지 않음
+      if (page.isCoverPage) return true
+      
+      // 모든 레이아웃이 빈 경우 (photoId가 없거나 빈 문자열인 경우)
+      const isEmpty = page.layouts.every(layout => !layout.photoId || layout.photoId === "")
+      
+      if (isEmpty) {
+        removedPageIds.push(page.id)
+        removedIndices.push(index)
+      }
+      
+      return !isEmpty
+    })
+
+    // 삭제할 페이지가 있는 경우에만 상태 업데이트
+    if (removedPageIds.length > 0) {
+      setAlbum((prev) => ({
+        ...prev!,
+        pages: nonEmptyPages
+      }))
+    }
+
+    return { 
+      removedPages: removedPageIds, 
+      removedIndices, 
+      newTotalPages: nonEmptyPages.length 
+    }
+  }
+
   const addTemplate = async (template: LayoutTemplate) => {
     if (user && user.role === "admin") {
       try {
@@ -557,6 +608,8 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         createAlbum,
         updatePage,
         swapPhotos,
+        insertPage,
+        removeEmptyPages,
         addTemplate,
         updateTemplate,
         deleteTemplate,

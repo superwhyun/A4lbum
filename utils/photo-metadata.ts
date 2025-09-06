@@ -97,7 +97,6 @@ export async function extractPhotoLocation(file: File): Promise<string | undefin
     // EXIF-JS를 동적으로 로드
     const EXIF = await loadExifJs();
     if (!EXIF) {
-      console.log('EXIF 라이브러리를 로드할 수 없습니다.');
       return fallbackLocationExtraction(file);
     }
     
@@ -110,20 +109,21 @@ export async function extractPhotoLocation(file: File): Promise<string | undefin
           const latRef = EXIF.getTag(this, "GPSLatitudeRef");
           const lonRef = EXIF.getTag(this, "GPSLongitudeRef");
           
-          console.log('EXIF GPS 데이터:', { lat, lon, latRef, lonRef });
           
           if (lat && lon && latRef && lonRef) {
             // GPS 좌표를 십진수로 변환
             const latDecimal = convertDMSToDD(lat, latRef);
             const lonDecimal = convertDMSToDD(lon, lonRef);
             
-            console.log('GPS 좌표:', { latDecimal, lonDecimal });
             
-            // 좌표를 기반으로 대략적인 위치 추정
-            const location = getLocationFromCoordinates(latDecimal, lonDecimal);
-            resolve(location);
+            // 좌표를 기반으로 실제 위치 가져오기
+            getLocationFromCoordinates(latDecimal, lonDecimal).then(location => {
+              resolve(location);
+            }).catch(error => {
+              console.error('위치 변환 오류:', error);
+              resolve(fallbackLocationExtraction(file));
+            });
           } else {
-            console.log('GPS 데이터가 없습니다. 파일명에서 위치 추출 시도');
             resolve(fallbackLocationExtraction(file));
           }
         } catch (error) {
@@ -182,7 +182,6 @@ function fallbackLocationExtraction(file: File): string | undefined {
   
   for (const { pattern, location } of locationPatterns) {
     if (pattern.test(filename)) {
-      console.log('파일명에서 위치 정보 발견:', location);
       return location;
     }
   }
@@ -199,8 +198,79 @@ function convertDMSToDD(dms: number[], ref: string): number {
   return dd;
 }
 
-// 좌표를 기반으로 더 정확한 한국 내 위치 추정
-function getLocationFromCoordinates(lat: number, lon: number): string | undefined {
+// 좌표를 기반으로 실제 위치 정보 가져오기
+async function getLocationFromCoordinates(lat: number, lon: number): Promise<string | undefined> {
+  // 먼저 카카오맵 API로 실제 주소 시도
+  try {
+    const realLocation = await getRealLocationFromAPI(lat, lon)
+    if (realLocation) {
+      return realLocation
+    }
+  } catch (error) {
+    console.error('실제 위치 API 호출 실패:', error)
+  }
+  
+  // API 실패 시 기존 하드코딩된 방식으로 fallback
+  return getFallbackLocationFromCoordinates(lat, lon)
+}
+
+// 실제 API를 통해 위치 정보 가져오기
+async function getRealLocationFromAPI(lat: number, lon: number): Promise<string | undefined> {
+  try {
+    // 카카오맵 REST API 사용
+    const response = await fetch(
+      `https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${lon}&y=${lat}&input_coord=WGS84`,
+      {
+        headers: {
+          'Authorization': `KakaoAK ${process.env.NEXT_PUBLIC_KAKAO_API_KEY || ''}`
+        }
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error('API 응답 실패')
+    }
+    
+    const data = await response.json()
+    
+    if (data.documents && data.documents.length > 0) {
+      const address = data.documents[0]
+      
+      // 도로명 주소가 있으면 우선 사용
+      if (address.road_address) {
+        const region = address.road_address.region_1depth_name // 시/도
+        const city = address.road_address.region_2depth_name   // 시/군/구
+        
+        // 시/군/구 정보가 있으면 사용, 없으면 시/도만 사용
+        if (city && city !== region) {
+          return city.replace(/시$|군$|구$/, '') // "시", "군", "구" 제거
+        } else {
+          return region.replace(/특별시$|광역시$|특별자치시$|도$/, '') // 행정구역 단위 제거
+        }
+      }
+      
+      // 도로명 주소가 없으면 지번 주소 사용
+      if (address.address) {
+        const region = address.address.region_1depth_name
+        const city = address.address.region_2depth_name
+        
+        if (city && city !== region) {
+          return city.replace(/시$|군$|구$/, '')
+        } else {
+          return region.replace(/특별시$|광역시$|특별자치시$|도$/, '')
+        }
+      }
+    }
+    
+    return undefined
+  } catch (error) {
+    console.error('카카오맵 API 오류:', error)
+    return undefined
+  }
+}
+
+// 기존 하드코딩된 방식 (fallback용)
+function getFallbackLocationFromCoordinates(lat: number, lon: number): string | undefined {
   // 한국의 주요 도시 좌표 (더 정확한 범위로 조정)
   const locations = [
     { name: '서울', lat: [37.413, 37.715], lon: [126.734, 127.269] },
@@ -208,6 +278,7 @@ function getLocationFromCoordinates(lat: number, lon: number): string | undefine
     { name: '대구', lat: [35.798, 35.934], lon: [128.473, 128.781] },
     { name: '인천', lat: [37.386, 37.637], lon: [126.406, 126.771] },
     { name: '대전', lat: [36.248, 36.426], lon: [127.314, 127.546] },
+    { name: '세종', lat: [36.482, 36.587], lon: [127.230, 127.330] },
     { name: '광주', lat: [35.086, 35.228], lon: [126.705, 127.018] },
     { name: '울산', lat: [35.518, 35.614], lon: [129.216, 129.424] },
     { name: '제주', lat: [33.231, 33.567], lon: [126.161, 126.957] },

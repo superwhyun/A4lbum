@@ -10,6 +10,9 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+  .font-nanum-pen {
+    font-family: var(--font-nanum-pen), cursive;
+  }
 }
 
 @layer base {

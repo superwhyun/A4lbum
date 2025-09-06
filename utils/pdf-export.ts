@@ -97,8 +97,8 @@ function createTextImage(
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")!
   
-  // 폰트 설정
-  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+  // 폰트 설정 - 나눔펜스크립트
+  ctx.font = `${fontSize}px 'Nanum Pen Script', cursive`
   ctx.fillStyle = textColor
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
@@ -114,7 +114,7 @@ function createTextImage(
   canvas.height = textHeight + padding * 2
   
   // 폰트 재설정 (canvas 크기 변경으로 리셋됨)
-  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+  ctx.font = `${fontSize}px 'Nanum Pen Script', cursive`
   ctx.fillStyle = textColor
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
@@ -134,6 +134,72 @@ function createTextImage(
     width: canvas.width,
     height: canvas.height
   }
+}
+
+/**
+ * PDF에 메타정보를 렌더링 (배경 박스와 텍스트)
+ */
+function renderMetadataToPDF(
+  pdf: jsPDF,
+  photo: Photo,
+  frameX: number,
+  frameY: number,
+  frameWidth: number,
+  frameHeight: number,
+  theme: string
+) {
+  if (!photo.date && !photo.location) return
+
+  // 메타정보 텍스트 구성
+  let metadataText = ''
+  if (photo.date && photo.location) {
+    metadataText = `${photo.date} | ${photo.location}`
+  } else if (photo.date) {
+    metadataText = photo.date
+  } else if (photo.location) {
+    metadataText = photo.location
+  }
+
+  // 텍스트 색상 (흰색 고정)
+  const textColor = '#FFFFFF'
+  
+  // 폰트 크기 (PDF용으로 더 크게)
+  const fontSize = 24 // PDF에서 보기 좋은 크기
+  
+  // 메타정보를 이미지로 변환
+  const textImage = createTextImage(metadataText, textColor, fontSize)
+  
+  // px → mm 변환
+  const PX_TO_MM = 25.4 / 96
+  const textWidth = textImage.width * PX_TO_MM
+  const textHeight = textImage.height * PX_TO_MM
+  
+  // 배경 박스 크기 및 위치 (프레임 하단)
+  const boxHeight = textHeight * 1.5 // 텍스트보다 조금 높게
+  const boxY = frameY + frameHeight - boxHeight
+  
+  // 반투명 검은색 배경 박스
+  pdf.setFillColor(0, 0, 0) // 검은색
+  pdf.setDrawColor(0, 0, 0)
+  pdf.setGState(pdf.GState({ opacity: 0.3 })) // 30% 불투명도
+  pdf.rect(frameX, boxY, frameWidth, boxHeight, 'F')
+  
+  // 불투명도 리셋
+  pdf.setGState(pdf.GState({ opacity: 1.0 }))
+  
+  // 텍스트 위치 (오른쪽 정렬)
+  const textX = frameX + frameWidth - textWidth - 2 // 오른쪽에서 2mm 여백
+  const textY = boxY + (boxHeight - textHeight) / 2
+  
+  // 텍스트 렌더링
+  pdf.addImage(
+    textImage.imageData,
+    "PNG",
+    textX,
+    textY,
+    textWidth,
+    textHeight
+  )
 }
 
 /**
@@ -306,6 +372,11 @@ export async function exportAlbumToPDF(
         pdfFrameW,
         pdfFrameH
       )
+
+      // 메타정보 렌더링 (표지 페이지가 아닌 경우에만)
+      if (!page.isCoverPage && photo && (photo.date || photo.location)) {
+        renderMetadataToPDF(pdf, photo, pdfFrameX, pdfFrameY, pdfFrameW, pdfFrameH, album.theme)
+      }
     }
 
     // 타이틀 렌더링 (표지 페이지나 타이틀이 있는 페이지)

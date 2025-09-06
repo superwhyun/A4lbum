@@ -75,13 +75,13 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
       >
         {layouts.map((layout) => {
           const photo = photos.find((p) => p.id === layout.photoId)
-          if (!photo) return null
+          // 빈 슬롯인 경우에도 PhotoFrame을 렌더링 (photo는 undefined일 수 있음)
 
           return (
             <PhotoFrame
               key={layout.id}
               layout={layout}
-              photo={photo}
+              photo={photo!} // photo가 없어도 PhotoFrame에서 처리
               editMode={editMode}
               pageId={page.id}
               isSelected={selectedPhoto?.layoutId === layout.id && selectedPhoto?.pageId === page.id}
