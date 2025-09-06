@@ -4,6 +4,7 @@ import React from "react"
 import { createContext, useContext, useState, type ReactNode } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import type { Photo, Album, LayoutTemplate, AlbumPage, PhotoLayout } from "@/types/album"
+import { extractPhotoDate, extractPhotoLocation } from "@/utils/photo-metadata"
 
 interface AlbumContextType {
   photos: Photo[]
@@ -134,6 +135,10 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
       ctx.drawImage(img, 0, 0, tw, th)
       const thumbnailUrl = canvas.toDataURL("image/jpeg", 0.7)
 
+      // 사진 촬영 날짜 및 위치 정보 추출
+      const photoDate = await extractPhotoDate(file)
+      const photoLocation = await extractPhotoLocation(file)
+
       newPhotos.push({
         id: `photo-${Date.now()}-${Math.random()}`,
         file,
@@ -141,6 +146,8 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         width: img.width,
         height: img.height,
         thumbnailUrl,
+        date: photoDate,
+        location: photoLocation,
       })
       URL.revokeObjectURL(url)
       setUploadProgress(Math.round(((i + 1) / files.length) * 100))
@@ -228,10 +235,15 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         photoY: 50,
       }
 
-      // 기본 타이틀: 사진 촬영 날짜 (YYYY.MM 형식)
+      // 기본 타이틀: 첫 번째 사진의 촬영 날짜 사용
       const getDefaultTitle = () => {
+        // 첫 번째 사진의 촬영 날짜가 있으면 그것을 사용
+        if (coverPhoto.date) {
+          return coverPhoto.date
+        }
+        // 없으면 현재 날짜를 사용 (fallback)
         const now = new Date()
-        return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.`
+        return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
       }
 
       pages.push({

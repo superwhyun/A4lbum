@@ -167,7 +167,7 @@ export function PhotoFrame({
       )}
       {(photo.date || photo.location) && (
         <div 
-          className={`absolute bottom-0 left-0 right-0 p-1.5 bg-black bg-opacity-60 pointer-events-none ${metadataTextSize || 'text-xs'}`}
+          className={`absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-black bg-opacity-30 pointer-events-none text-[10px]`}
           style={{ color: metadataTextColor || '#FFFFFF' }}
         >
           {photo.date && <span>{photo.date}</span>}
