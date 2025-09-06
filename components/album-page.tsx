@@ -88,6 +88,7 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
               onLayoutChange={(newLayout) => handleLayoutChange(layout.id, newLayout)}
               onPhotoSelect={onPhotoSelect}
               theme={theme}
+              isCoverPage={page.isCoverPage}
             />
           )
         })}

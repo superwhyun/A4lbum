@@ -16,6 +16,7 @@ interface PhotoFrameProps {
   metadataTextColor?: string;
   metadataTextSize?: string;
   theme?: string;
+  isCoverPage?: boolean;
 }
 
 export function PhotoFrame({ 
@@ -28,7 +29,8 @@ export function PhotoFrame({
   onPhotoSelect,
   metadataTextColor,
   metadataTextSize,
-  theme 
+  theme,
+  isCoverPage = false
 }: PhotoFrameProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
@@ -165,9 +167,9 @@ export function PhotoFrame({
           </div>
         </div>
       )}
-      {(photo.date || photo.location) && (
+      {!isCoverPage && (photo.date || photo.location) && (
         <div 
-          className={`absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-black bg-opacity-30 pointer-events-none text-[10px]`}
+          className={`absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-black bg-opacity-30 pointer-events-none text-[10px] text-right`}
           style={{ color: metadataTextColor || '#FFFFFF' }}
         >
           {photo.date && <span>{photo.date}</span>}
