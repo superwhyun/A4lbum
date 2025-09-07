@@ -12,25 +12,60 @@ export interface PhotoMetadata {
  */
 export async function extractPhotoDate(file: File): Promise<string | undefined> {
   try {
-    // 파일의 lastModified를 기본값으로 사용
-    const fileDate = new Date(file.lastModified);
+    // 서버 사이드에서는 실행하지 않음
+    if (typeof window === 'undefined') {
+      const fileDate = new Date(file.lastModified);
+      return `${fileDate.getFullYear()}.${String(fileDate.getMonth() + 1).padStart(2, '0')}.${String(fileDate.getDate()).padStart(2, '0')}`;
+    }
+
+    // EXIF-JS를 사용해서 실제 촬영 날짜 추출
+    const EXIF = await loadExifJs();
+    if (!EXIF) {
+      // EXIF 라이브러리를 로드할 수 없으면 파일 날짜 사용
+      const fileDate = new Date(file.lastModified);
+      return `${fileDate.getFullYear()}.${String(fileDate.getMonth() + 1).padStart(2, '0')}.${String(fileDate.getDate()).padStart(2, '0')}`;
+    }
     
-    // EXIF 데이터를 읽기 위해 ArrayBuffer로 변환
-    const arrayBuffer = await file.arrayBuffer();
-    const dataView = new DataView(arrayBuffer);
+    return new Promise((resolve) => {
+      EXIF.getData(file, function() {
+        try {
+          // EXIF에서 실제 촬영 날짜 추출
+          const dateTime = EXIF.getTag(this, "DateTimeOriginal") || 
+                          EXIF.getTag(this, "DateTime") || 
+                          EXIF.getTag(this, "DateTimeDigitized");
+          
+          if (dateTime) {
+            // EXIF 날짜 형식: "2023:12:25 14:30:45" → Date 객체로 변환
+            const dateStr = dateTime.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3');
+            const exifDate = new Date(dateStr);
+            
+            if (!isNaN(exifDate.getTime())) {
+              const result = `${exifDate.getFullYear()}.${String(exifDate.getMonth() + 1).padStart(2, '0')}.${String(exifDate.getDate()).padStart(2, '0')}`;
+              resolve(result);
+              return;
+            }
+          }
+          
+          // EXIF 날짜가 없으면 파일 날짜 사용
+          const fileDate = new Date(file.lastModified);
+          const result = `${fileDate.getFullYear()}.${String(fileDate.getMonth() + 1).padStart(2, '0')}.${String(fileDate.getDate()).padStart(2, '0')}`;
+          resolve(result);
+          
+        } catch (error) {
+          console.error('EXIF 날짜 파싱 오류:', error);
+          // 에러 시 파일 날짜 사용
+          const fileDate = new Date(file.lastModified);
+          const result = `${fileDate.getFullYear()}.${String(fileDate.getMonth() + 1).padStart(2, '0')}.${String(fileDate.getDate()).padStart(2, '0')}`;
+          resolve(result);
+        }
+      });
+    });
     
-    // EXIF 데이터에서 DateTimeOriginal을 찾기 위한 간단한 파싱
-    const exifDate = await parseExifDate(dataView);
-    
-    // EXIF에서 날짜를 찾았으면 그것을 사용, 없으면 파일의 lastModified 사용
-    const targetDate = exifDate || fileDate;
-    
-    return `${targetDate.getFullYear()}.${String(targetDate.getMonth() + 1).padStart(2, '0')}.${String(targetDate.getDate()).padStart(2, '0')}`;
   } catch (error) {
     console.error('사진 날짜 추출 실패:', error);
-    // 에러가 발생하면 현재 날짜를 사용
-    const now = new Date();
-    return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
+    // 에러가 발생하면 파일 날짜 사용
+    const fileDate = new Date(file.lastModified);
+    return `${fileDate.getFullYear()}.${String(fileDate.getMonth() + 1).padStart(2, '0')}.${String(fileDate.getDate()).padStart(2, '0')}`;
   }
 }
 
