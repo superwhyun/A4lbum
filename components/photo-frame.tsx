@@ -213,7 +213,7 @@ export function PhotoFrame({
           )}
           {!isCoverPage && photo && (photo.date || photo.location) && (
             <div 
-              className={`absolute bottom-0 left-0 right-0 px-1.5 py-1 bg-black bg-opacity-30 pointer-events-none text-[10px] text-right font-nanum-pen`}
+              className={`absolute bottom-0 left-0 right-0 px-1.5 py-0.5 bg-black bg-opacity-30 pointer-events-none text-[10px] text-right font-nanum-pen`}
               style={{ color: metadataTextColor || '#FFFFFF' }}
             >
               {photo.date && <span>{photo.date}</span>}

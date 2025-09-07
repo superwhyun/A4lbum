@@ -174,8 +174,8 @@ function renderMetadataToPDF(
   const textWidth = textImage.width * PX_TO_MM
   const textHeight = textImage.height * PX_TO_MM
   
-  // 배경 박스 크기 및 위치 (프레임 하단)
-  const boxHeight = textHeight * 1.5 // 텍스트보다 조금 높게
+  // 배경 박스 크기 및 위치 (프레임 하단) - 매우 얇게
+  const boxHeight = textHeight * 0.52 // 텍스트 높이의 절반 정도로 매우 얇게
   const boxY = frameY + frameHeight - boxHeight
   
   // 반투명 검은색 배경 박스
