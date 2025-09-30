@@ -146,10 +146,10 @@ export function PhotoFrame({
               }`
             : "border border-gray-200 bg-gray-50"
           : editMode 
-            ? `border-2 cursor-move ${
+            ? `border-2 ${
                 isSelected 
-                  ? "border-blue-500 shadow-lg transform scale-105 z-10" 
-                  : "border-dashed border-blue-400 hover:border-blue-500"
+                  ? "border-blue-500 shadow-lg transform scale-105 z-10 cursor-move" 
+                  : "border-transparent hover:border-blue-300 cursor-pointer"
               }` 
             : "border border-gray-200"
       }`}
@@ -200,14 +200,14 @@ export function PhotoFrame({
             }}
             draggable={false}
           />
-          {editMode && (
-            <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center pointer-events-none">
-              <div className={`rounded px-2 py-1 text-xs shadow ${
+          {editMode && isSelected && (
+            <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center pointer-events-none">
+              <div className={`rounded px-3 py-2 text-sm font-semibold shadow-lg ${
                 theme === 'black' 
-                  ? 'bg-gray-800 text-white border border-gray-600' 
-                  : 'bg-white text-gray-900'
+                  ? 'bg-blue-600 text-white border border-blue-400' 
+                  : 'bg-blue-500 text-white'
               }`}>
-                {isSelected ? "선택됨 - 다른 사진 클릭" : "클릭하여 선택"}
+                ↔️ 다른 사진 클릭하여 교체
               </div>
             </div>
           )}
