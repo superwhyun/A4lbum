@@ -19,13 +19,13 @@ interface PhotoFrameProps {
   isCoverPage?: boolean;
 }
 
-export function PhotoFrame({ 
-  layout, 
-  photo, 
-  editMode, 
-  pageId, 
-  isSelected, 
-  onLayoutChange, 
+export function PhotoFrame({
+  layout,
+  photo,
+  editMode,
+  pageId,
+  isSelected,
+  onLayoutChange,
   onPhotoSelect,
   metadataTextColor,
   metadataTextSize,
@@ -46,7 +46,7 @@ export function PhotoFrame({
       setPreviewUrl(null)
       return
     }
-    
+
     if (photo.thumbnailUrl) {
       setPreviewUrl(photo.thumbnailUrl)
     } else if (photo.file) {
@@ -136,23 +136,20 @@ export function PhotoFrame({
   return (
     <div
       ref={frameRef}
-      className={`absolute overflow-hidden rounded-md shadow-sm transition-all duration-200 ${
-        isEmpty
+      className={`absolute overflow-hidden rounded-md shadow-sm transition-all duration-200 ${isEmpty
           ? editMode
-            ? `border-2 border-dashed cursor-pointer ${
-                isSelected 
-                  ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105 z-10" 
-                  : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-25"
-              }`
+            ? `border-2 border-dashed cursor-pointer ${isSelected
+              ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105 z-10"
+              : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-25"
+            }`
             : "border border-gray-200 bg-gray-50"
-          : editMode 
-            ? `border-2 ${
-                isSelected 
-                  ? "border-blue-500 shadow-lg transform scale-105 z-10 cursor-move" 
-                  : "border-transparent hover:border-blue-300 cursor-pointer"
-              }` 
+          : editMode
+            ? `border-2 ${isSelected
+              ? "border-blue-500 shadow-lg transform scale-105 z-10 cursor-move"
+              : "border-transparent hover:border-blue-300 cursor-pointer"
+            }`
             : "border border-gray-200"
-      }`}
+        }`}
       style={{
         left: `${layout.x}%`,
         top: `${layout.y}%`,
@@ -166,21 +163,17 @@ export function PhotoFrame({
         // 빈 슬롯 표시
         <div className="w-full h-full flex items-center justify-center">
           {editMode && (
-            <div className={`text-xs text-center p-2 ${
-              isSelected ? 'text-blue-600' : 'text-gray-400'
-            }`}>
+            <div className={`text-xs text-center p-2 ${isSelected ? 'text-blue-600' : 'text-gray-400'
+              }`}>
               <div className="mb-1">📷</div>
               <div className="font-medium">빈 슬롯</div>
               {isSelected ? (
                 <>
-                  <div className="text-[10px] mt-1 text-blue-500">선택됨!</div>
-                  <div className="text-[10px]">다른 사진 클릭하여</div>
-                  <div className="text-[10px]">여기로 이동</div>
+                  <div className="text-[10px] mt-1 text-blue-500 font-bold">선택됨</div>
                 </>
               ) : (
                 <>
-                  <div className="text-[10px] mt-1">클릭하여 선택 후</div>
-                  <div className="text-[10px]">다른 사진과 스워핑</div>
+                  <div className="text-[10px] mt-1 text-gray-400">클릭하여 선택</div>
                 </>
               )}
             </div>
@@ -201,18 +194,16 @@ export function PhotoFrame({
             draggable={false}
           />
           {editMode && isSelected && (
-            <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center pointer-events-none">
-              <div className={`rounded px-3 py-2 text-sm font-semibold shadow-lg ${
-                theme === 'black' 
-                  ? 'bg-blue-600 text-white border border-blue-400' 
-                  : 'bg-blue-500 text-white'
-              }`}>
-                ↔️ 다른 사진 클릭하여 교체
+            <div className="absolute inset-0 border-4 border-blue-500 pointer-events-none z-10 flex items-start justify-end p-2">
+              <div className="bg-blue-500 text-white rounded-full p-1 shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
               </div>
             </div>
           )}
           {!isCoverPage && photo && (photo.date || photo.location) && (
-            <div 
+            <div
               className={`absolute bottom-0 left-0 right-0 px-1.5 py-0.5 bg-black bg-opacity-30 pointer-events-none text-[10px] text-right font-nanum-pen`}
               style={{ color: metadataTextColor || '#FFFFFF' }}
             >

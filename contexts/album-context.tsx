@@ -12,7 +12,7 @@ interface AlbumContextType {
   templates: LayoutTemplate[]
   addPhotos: (files: File[]) => void
   createAlbum: (theme: string, orientation: "portrait" | "landscape") => void
-  updatePage: (pageId: string, layouts: PhotoLayout[]) => void
+  updatePage: (pageId: string, layouts: PhotoLayout[], pageUpdates?: Partial<AlbumPage>) => void
   swapPhotos: (sourceLayoutId: string, targetLayoutId: string, sourcePageId: string, targetPageId: string) => void
   insertPage: (afterPageIndex: number, newPage: AlbumPage) => void
   removeEmptyPages: () => { removedPages: string[], removedIndices: number[], newTotalPages: number }
@@ -24,6 +24,7 @@ interface AlbumContextType {
   setUploadProgress: (value: number) => void
   pdfProgress: number
   setPdfProgress: (value: number) => void
+  deletePhoto: (photoId: string) => void
 }
 
 const AlbumContext = createContext<AlbumContextType | undefined>(undefined)
@@ -34,7 +35,7 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   const [album, setAlbum] = useState<Album | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [pdfProgress, setPdfProgress] = useState(0)
-  
+
   // 서버에서 관리자 레이아웃 불러오기
   const loadServerLayouts = async () => {
     try {
@@ -101,7 +102,7 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
       ],
     },
   ]
-  
+
   const [templates, setTemplates] = useState<LayoutTemplate[]>([])
 
   // %%%%%LAST%%%%%
@@ -298,15 +299,15 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
 
     const sourcePage = album.pages.find(p => p.id === sourcePageId)
     const targetPage = album.pages.find(p => p.id === targetPageId)
-    
+
     if (!sourcePage || !targetPage) return
 
     const sourceLayout = sourcePage.layouts.find(l => l.id === sourceLayoutId)
     const targetLayout = targetPage.layouts.find(l => l.id === targetLayoutId)
-    
+
     if (!sourceLayout || !targetLayout) return
 
-// %%%%%LAST%%%%%    const sourcePhotoId = sourceLayout.photoId
+    // %%%%%LAST%%%%%    const sourcePhotoId = sourceLayout.photoId
     const sourcePhotoId = sourceLayout.photoId
     const targetPhotoId = targetLayout.photoId
 
@@ -324,7 +325,7 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         })
       }))
     }
-    
+
     setAlbum(newAlbum)
   }
 
@@ -333,7 +334,7 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
 
     setAlbum((prev) => ({
       ...prev!,
-      pages: prev!.pages.map((page) => 
+      pages: prev!.pages.map((page) =>
         page.id === pageId ? { ...page, layouts, ...pageUpdates } : page
       ),
     }))
@@ -361,15 +362,15 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     const nonEmptyPages = album.pages.filter((page, index) => {
       // 표지 페이지는 삭제하지 않음
       if (page.isCoverPage) return true
-      
+
       // 모든 레이아웃이 빈 경우 (photoId가 없거나 빈 문자열인 경우)
       const isEmpty = page.layouts.every(layout => !layout.photoId || layout.photoId === "")
-      
+
       if (isEmpty) {
         removedPageIds.push(page.id)
         removedIndices.push(index)
       }
-      
+
       return !isEmpty
     })
 
@@ -381,10 +382,10 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
       }))
     }
 
-    return { 
-      removedPages: removedPageIds, 
-      removedIndices, 
-      newTotalPages: nonEmptyPages.length 
+    return {
+      removedPages: removedPageIds,
+      removedIndices,
+      newTotalPages: nonEmptyPages.length
     }
   }
 
@@ -548,10 +549,10 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     const loadAllTemplates = async () => {
       if (typeof window !== "undefined") {
         const serverLayouts = await loadServerLayouts();
-        
+
         const storageKey = getStorageKey('templates');
         const saved = localStorage.getItem(storageKey);
-        
+
         let userLayouts: LayoutTemplate[];
 
         if (saved) {
@@ -582,12 +583,12 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
           // No saved data in local storage, use default templates
           userLayouts = [...defaultTemplates];
         }
-        
+
         const allTemplates = [...serverLayouts, ...userLayouts];
         setTemplates(allTemplates);
       }
     };
-    
+
     if (user !== undefined) {
       loadAllTemplates();
     }
@@ -618,6 +619,21 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         setUploadProgress,
         pdfProgress,
         setPdfProgress,
+        deletePhoto: (photoId: string) => {
+          setPhotos((prev) => prev.filter((p) => p.id !== photoId))
+          // Also remove from album if used
+          if (album) {
+            setAlbum((prev) => ({
+              ...prev!,
+              pages: prev!.pages.map((page) => ({
+                ...page,
+                layouts: page.layouts.map((layout) =>
+                  layout.photoId === photoId ? { ...layout, photoId: "" } : layout
+                )
+              }))
+            }))
+          }
+        },
       }}
     >
       {children}
