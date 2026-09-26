@@ -11,16 +11,17 @@ import { PhotoSidebar } from "./photo-sidebar"
 import { Badge } from "@/components/ui/badge"
 
 export function AlbumViewer() {
-  const { album, photos, swapPhotos, templates, updatePage, insertPage, removeEmptyPages, pdfProgress, setPdfProgress } = useAlbum()
+  const { album, photos, swapPhotos, templates, updatePage, insertPage, removeEmptyPages, pdfProgress, setPdfProgress, toggleMetadata } = useAlbum()
   const [currentPage, setCurrentPage] = useState(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLDivElement | null)[]>([])
   const [editMode, setEditMode] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<{ layoutId: string; pageId: string } | null>(null)
-  const [swapSource, setSwapSource] = useState<{ layoutId: string; pageId: string } | null>(null)
   const [showPdfModal, setShowPdfModal] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const [scale, setScale] = useState(1)
+  const [pdfDownloadUrl, setPdfDownloadUrl] = useState<string | null>(null)
+  const [pdfFileName, setPdfFileName] = useState<string>("")
 
   if (!album || album.pages.length === 0) {
     return (
@@ -55,33 +56,12 @@ export function AlbumViewer() {
   const handlePhotoSelect = (layoutId: string, pageId: string) => {
     if (!editMode) return
 
-    if (swapSource) {
-      // 스왑 모드인 경우, 클릭한 대상과 스왑 실행
-      if (swapSource.layoutId !== layoutId || swapSource.pageId !== pageId) {
-        swapPhotos(swapSource.layoutId, layoutId, swapSource.pageId, pageId)
-      }
-      setSwapSource(null) // 스왑 모드 종료
-      setSelectedPhoto(null) // 선택 해제
-      return
-    }
-
     // 일반 선택 모드
     if (selectedPhoto?.layoutId === layoutId && selectedPhoto?.pageId === pageId) {
       setSelectedPhoto(null) // 이미 선택된 것 클릭 시 해제
     } else {
       setSelectedPhoto({ layoutId, pageId }) // 선택
     }
-  }
-
-  const startSwap = () => {
-    if (selectedPhoto) {
-      setSwapSource(selectedPhoto)
-      // 토스트나 알림으로 "교체할 다른 사진을 클릭하세요"라고 알려주면 좋음
-    }
-  }
-
-  const cancelSwap = () => {
-    setSwapSource(null)
   }
 
   const removePhotoFromLayout = () => {
@@ -229,8 +209,13 @@ export function AlbumViewer() {
     if (!album) return
 
     setShowPdfModal(true)
+    setPdfDownloadUrl(null) // 이전 링크 초기화
     try {
-      await exportAlbumToPDF(album, photos, setPdfProgress)
+      const result = await exportAlbumToPDF(album, photos, setPdfProgress, album.showMetadata ?? true)
+      if (result) {
+        setPdfDownloadUrl(result.url)
+        setPdfFileName(result.fileName)
+      }
     } catch (error) {
       console.error("PDF 생성 중 오류:", error)
       alert("PDF 생성 중 오류가 발생했습니다.")
@@ -238,18 +223,60 @@ export function AlbumViewer() {
     setShowPdfModal(false)
   }
 
+  const handlePhotoContextMenu = (layoutId: string, pageId: string) => {
+    if (!editMode) return
+
+    if (selectedPhoto) {
+      // 이미 선택된 사진이 있는 경우, 우클릭한 사진과 교체
+      if (selectedPhoto.layoutId !== layoutId || selectedPhoto.pageId !== pageId) {
+        swapPhotos(selectedPhoto.layoutId, layoutId, selectedPhoto.pageId, pageId)
+        setSelectedPhoto(null) // 교체 후 선택 해제
+      }
+    } else {
+      // 선택된 사진이 없는 경우, 우클릭한 사진을 선택
+      setSelectedPhoto({ layoutId, pageId })
+    }
+  }
+
   // 화면 크기에 따라 앨범 페이지 크기 조정 (기본값보다 크게)
   const baseWidth = album.orientation === "portrait" ? 600 : 900 // 기존 400/600에서 1.5배 증가
   const baseHeight = album.orientation === "portrait" ? 849 : 600 // 비율 유지
 
   return (
-    <div className="flex h-[calc(100vh-100px)]">
+    <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden">
+      {/* 상단 툴바 영역을 고정하고 앨범 영역만 스크롤되게 하거나, 전체 레이아웃을 조정 */}
       {showPdfModal && pdfProgress > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center min-w-[300px]">
             <div className="mb-4 text-lg font-semibold">PDF 변환 중...</div>
             <Progress value={pdfProgress} />
             <div className="text-xs text-gray-500 mt-2">{pdfProgress}%</div>
+          </div>
+        </div>
+      )}
+
+      {pdfDownloadUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center min-w-[400px]">
+            <div className="mb-4 text-lg font-semibold">PDF 생성 완료!</div>
+            <p className="text-sm text-gray-600 mb-6">자동 다운로드가 시작되지 않으면 아래 버튼을 클릭하세요.</p>
+            <a
+              href={pdfDownloadUrl}
+              download={pdfFileName}
+              className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-4"
+            >
+              <Download className="w-5 h-5 mr-2" />
+              PDF 다운로드
+            </a>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPdfDownloadUrl(null)
+                URL.revokeObjectURL(pdfDownloadUrl)
+              }}
+            >
+              닫기
+            </Button>
           </div>
         </div>
       )}
@@ -271,7 +298,6 @@ export function AlbumViewer() {
                   setEditMode(!editMode)
                   if (editMode) {
                     setSelectedPhoto(null)
-                    setSwapSource(null)
                   }
                 }}
                 className={editMode ? "bg-blue-600 hover:bg-blue-700" : ""}
@@ -323,31 +349,24 @@ export function AlbumViewer() {
         </div>
 
         {/* Selected Photo Actions Toolbar (Floating) */}
-        {editMode && selectedPhoto && !swapSource && (
+        {editMode && selectedPhoto && (
           <div className="bg-blue-50 border-b border-blue-100 px-6 py-2 flex items-center justify-center gap-4 animate-in slide-in-from-top-2">
             <span className="text-sm font-medium text-blue-900">선택된 칸 작업:</span>
-            <Button size="sm" variant="secondary" onClick={startSwap} className="bg-white hover:bg-blue-100 border border-blue-200 text-blue-700">
-              <ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />
-              위치 교체
-            </Button>
             <Button size="sm" variant="secondary" onClick={removePhotoFromLayout} className="bg-white hover:bg-red-50 border border-red-200 text-red-600">
               <X className="w-3.5 h-3.5 mr-1.5" />
               사진 비우기
             </Button>
-            <span className="text-xs text-blue-400 ml-2">💡 사진 보관함에서 사진을 클릭하면 이곳에 채워집니다</span>
-          </div>
-        )}
-
-        {/* Swap Mode Indicator */}
-        {editMode && swapSource && (
-          <div className="bg-yellow-50 border-b border-yellow-100 px-6 py-2 flex items-center justify-center gap-4 animate-in slide-in-from-top-2">
-            <span className="text-sm font-medium text-yellow-900 flex items-center">
-              <Badge variant="outline" className="mr-2 bg-yellow-100 border-yellow-300 text-yellow-800">교체 모드</Badge>
-              교체할 대상 사진을 클릭하세요
-            </span>
-            <Button size="sm" variant="ghost" onClick={cancelSwap} className="h-7 text-yellow-700 hover:text-yellow-900 hover:bg-yellow-100">
-              취소
-            </Button>
+            <div className="h-4 w-px bg-blue-200 mx-2"></div>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={album.showMetadata ?? true}
+                onChange={toggleMetadata}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm text-blue-800">날짜/장소 표시</span>
+            </label>
+            <span className="text-xs text-blue-400 ml-4">💡 사진을 교체하려면 현재 사진을 선택한 후, 바꿀 사진 위에서 <b>우클릭</b>하세요.</span>
           </div>
         )}
 
@@ -374,39 +393,7 @@ export function AlbumViewer() {
                     className={`flex flex-col gap-3 transition-all duration-300 ${index === currentPage ? "opacity-100 scale-100" : "opacity-40 scale-95 blur-[1px]"
                       }`}
                   >
-                    {/* Template Selector */}
-                    {editMode && index === currentPage && (
-                      <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200 w-full">
-                        <Layout className="w-4 h-4 text-gray-500" />
-                        <select
-                          className="flex-1 text-sm bg-transparent border-none focus:ring-0 cursor-pointer"
-                          value={page.templateId || ""}
-                          onChange={(e) => {
-                            const selectedId = e.target.value;
-                            const selectedTemplate = templates.find((t) => t.id === selectedId);
-                            if (selectedTemplate) {
-                              handleLayoutChangeWithPhotoManagement(index, page, selectedTemplate);
-                            }
-                          }}
-                        >
-                          <option value="">레이아웃 변경...</option>
-                          {sameCountTemplates.length > 0 && (
-                            <optgroup label={`현재와 동일 (${page.layouts.length}장)`}>
-                              {sameCountTemplates.map((t) => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {differentCountTemplates.length > 0 && (
-                            <optgroup label="다른 장수 (새 페이지 생성)">
-                              {differentCountTemplates.map((t) => (
-                                <option key={t.id} value={t.id}>{t.name} ({t.photoCount}장)</option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
-                      </div>
-                    )}
+
 
                     {/* Album Page */}
                     <div
@@ -424,30 +411,9 @@ export function AlbumViewer() {
                         editMode={editMode}
                         selectedPhoto={selectedPhoto}
                         onPhotoSelect={handlePhotoSelect}
+                        onPhotoContextMenu={handlePhotoContextMenu}
+                        showMetadata={album.showMetadata ?? true}
                       />
-
-                      {/* Swap Source Indicator Overlay */}
-                      {swapSource && swapSource.pageId === page.id && (
-                        <div className="absolute inset-0 pointer-events-none z-20">
-                          {page.layouts.map(layout => {
-                            if (layout.id === swapSource.layoutId) {
-                              return (
-                                <div
-                                  key={`swap-indicator-${layout.id}`}
-                                  className="absolute border-4 border-yellow-400 animate-pulse"
-                                  style={{
-                                    left: `${layout.x}%`,
-                                    top: `${layout.y}%`,
-                                    width: `${layout.width}%`,
-                                    height: `${layout.height}%`,
-                                  }}
-                                />
-                              )
-                            }
-                            return null
-                          })}
-                        </div>
-                      )}
                     </div>
 
                     <div className="text-center font-medium text-gray-500">
@@ -497,14 +463,72 @@ export function AlbumViewer() {
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Photo Sidebar */}
-      <PhotoSidebar
-        isOpen={showSidebar}
-        onClose={() => setShowSidebar(false)}
-        onPhotoSelect={handleSidebarPhotoSelect}
-      />
+        {/* Fixed Bottom Toolbar for Layout Selection */}
+        {editMode && album.pages[currentPage] && (
+          <div className="bg-indigo-600 border-t border-indigo-700 p-4 flex justify-center items-center gap-4 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+            <div className="flex items-center gap-3 max-w-md w-full">
+              <span className="text-sm font-bold text-white whitespace-nowrap flex items-center">
+                <Layout className="w-4 h-4 mr-2" />
+                레이아웃 변경:
+              </span>
+              <div className="relative flex-1">
+                <select
+                  className="w-full pl-3 pr-10 py-2 text-sm bg-white border-transparent focus:border-indigo-300 focus:ring-0 rounded-md shadow-sm text-gray-900 font-medium"
+                  value={album.pages[currentPage].templateId || ""}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const selectedTemplate = templates.find((t) => t.id === selectedId);
+                    if (selectedTemplate) {
+                      handleLayoutChangeWithPhotoManagement(currentPage, album.pages[currentPage], selectedTemplate);
+                    }
+                  }}
+                >
+                  <option value="">현재 레이아웃 유지</option>
+                  {(() => {
+                    const page = album.pages[currentPage];
+                    const availableTemplates = templates
+                      ? templates.filter((t) => t.orientation === album.orientation)
+                      : [];
+                    const sameCountTemplates = availableTemplates.filter(
+                      (t) => t.photoCount === page.layouts.length
+                    );
+                    const differentCountTemplates = availableTemplates.filter(
+                      (t) => t.photoCount !== page.layouts.length
+                    );
+
+                    return (
+                      <>
+                        {sameCountTemplates.length > 0 && (
+                          <optgroup label={`현재와 동일 (${page.layouts.length}장)`}>
+                            {sameCountTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {differentCountTemplates.length > 0 && (
+                          <optgroup label="다른 장수 (새 페이지 생성)">
+                            {differentCountTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name} ({t.photoCount}장)</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    );
+                  })()}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Photo Sidebar */}
+        <PhotoSidebar
+          isOpen={showSidebar}
+          onClose={() => setShowSidebar(false)}
+          onPhotoSelect={handleSidebarPhotoSelect}
+        />
+      </div>
     </div>
   )
 }

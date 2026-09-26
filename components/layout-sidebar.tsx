@@ -23,12 +23,15 @@ export default function LayoutSidebar({ selectedPhotoCount, onPhotoCountChange }
     { count: 4, label: '4장' },
     { count: 5, label: '5장' },
     { count: 6, label: '6장' },
+    { count: 7, label: '7장' },
+    { count: 8, label: '8장' },
+    { count: 9, label: '9장' },
   ];
   return (
     <aside className="w-64 bg-white border-r border-gray-200 h-screen sticky top-0">
       <div className="p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">사진 개수별 필터</h2>
-        
+
         <nav className="space-y-2">
           {photoCountOptions.map((option) => {
             const templateCount = getTemplateCountByPhotoCount(option.count);
@@ -36,18 +39,16 @@ export default function LayoutSidebar({ selectedPhotoCount, onPhotoCountChange }
               <button
                 key={option.count}
                 onClick={() => onPhotoCountChange(option.count)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors ${
-                  selectedPhotoCount === option.count
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-left transition-colors ${selectedPhotoCount === option.count
                     ? 'bg-blue-50 text-blue-700 border border-blue-200'
                     : 'text-gray-700 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <span className="font-medium">{option.label}</span>
-                <span className={`text-sm px-2 py-1 rounded-full ${
-                  selectedPhotoCount === option.count
+                <span className={`text-sm px-2 py-1 rounded-full ${selectedPhotoCount === option.count
                     ? 'bg-blue-100 text-blue-600'
                     : 'bg-gray-100 text-gray-500'
-                }`}>
+                  }`}>
                   {templateCount}개
                 </span>
               </button>
@@ -55,7 +56,7 @@ export default function LayoutSidebar({ selectedPhotoCount, onPhotoCountChange }
           })}
         </nav>
       </div>
-      
+
       <div className="px-6 py-4 border-t border-gray-200">
         <div className="text-sm text-gray-500">
           <p>총 템플릿: <span className="font-medium text-gray-700">{templates.length}개</span></p>

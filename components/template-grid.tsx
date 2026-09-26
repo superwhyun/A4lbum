@@ -14,13 +14,17 @@ export default function TemplateGrid({ selectedPhotoCount, onEditTemplate }: Tem
   const { templates, deleteTemplate } = useAlbum();
   const { user } = useAuth();
 
+  const [orientationFilter, setOrientationFilter] = useState<'all' | 'portrait' | 'landscape'>('all');
+
   // 디버깅용 - templates 배열 확인
   console.log('Templates:', templates);
   console.log('Server templates:', templates.filter(t => t.id.startsWith('server-')));
 
-  const filteredTemplates = selectedPhotoCount === 'all' 
-    ? templates 
-    : templates.filter(template => template.photoCount === selectedPhotoCount);
+  const filteredTemplates = templates.filter(template => {
+    const matchesPhotoCount = selectedPhotoCount === 'all' || template.photoCount === selectedPhotoCount;
+    const matchesOrientation = orientationFilter === 'all' || template.orientation === orientationFilter;
+    return matchesPhotoCount && matchesOrientation;
+  });
 
   const renderLayoutPreview = (template: LayoutTemplate) => {
     return (
@@ -52,29 +56,60 @@ export default function TemplateGrid({ selectedPhotoCount, onEditTemplate }: Tem
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">
-          {selectedPhotoCount === 'all' ? '전체 템플릿' : `${selectedPhotoCount}장 사진 템플릿`}
-        </h2>
-        <p className="text-gray-600 mt-1">{filteredTemplates.length}개의 템플릿</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {selectedPhotoCount === 'all' ? '전체 템플릿' : `${selectedPhotoCount}장 사진 템플릿`}
+          </h2>
+          <p className="text-gray-600 mt-1">{filteredTemplates.length}개의 템플릿</p>
+        </div>
+
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          <button
+            onClick={() => setOrientationFilter('all')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${orientationFilter === 'all'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+              }`}
+          >
+            전체
+          </button>
+          <button
+            onClick={() => setOrientationFilter('portrait')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${orientationFilter === 'portrait'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+              }`}
+          >
+            세로형
+          </button>
+          <button
+            onClick={() => setOrientationFilter('landscape')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${orientationFilter === 'landscape'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+              }`}
+          >
+            가로형
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-6">
         {filteredTemplates.map((template) => (
           <div key={template.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-            <div 
-              className={`bg-gray-50 border-b border-gray-200 relative ${
-                template.orientation === 'landscape' ? 'aspect-[297/210]' : 'aspect-[210/297]'
-              }`}
+            <div
+              className={`bg-gray-50 border-b border-gray-200 relative ${template.orientation === 'landscape' ? 'aspect-[297/210]' : 'aspect-[210/297]'
+                }`}
             >
               {renderLayoutPreview(template)}
-              
+
               <div className="absolute top-2 right-2 flex space-x-1">
                 {template.id.startsWith('server-') && (
                   <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">관리자</span>
                 )}
                 {(!template.id.startsWith('server-') || user?.role === 'admin') && (
-                  <button 
+                  <button
                     onClick={() => onEditTemplate(template)}
                     className="p-1 bg-white rounded shadow hover:bg-gray-50"
                   >
@@ -84,7 +119,7 @@ export default function TemplateGrid({ selectedPhotoCount, onEditTemplate }: Tem
                   </button>
                 )}
                 {(!template.id.startsWith('server-') || user?.role === 'admin') && (
-                  <button 
+                  <button
                     onClick={(e) => handleDeleteTemplate(template.id, e)}
                     className="p-1 bg-white rounded shadow hover:bg-red-50"
                   >
@@ -95,7 +130,7 @@ export default function TemplateGrid({ selectedPhotoCount, onEditTemplate }: Tem
                 )}
               </div>
             </div>
-            
+
             <div className="p-4">
               <h3 className="font-medium text-gray-900 mb-2">{template.name}</h3>
               <div className="flex justify-between text-sm text-gray-500">

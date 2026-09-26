@@ -8,8 +8,8 @@ import { Header } from "@/components/header"
 import { GoogleOAuthProvider } from '@react-oauth/google'
 
 const inter = Inter({ subsets: ["latin"] })
-const nanumPenScript = Nanum_Pen_Script({ 
-  subsets: ["latin"], 
+const nanumPenScript = Nanum_Pen_Script({
+  subsets: ["latin"],
   weight: "400",
   variable: "--font-nanum-pen"
 })
@@ -17,7 +17,7 @@ const nanumPenScript = Nanum_Pen_Script({
 export const metadata: Metadata = {
   title: "A4lbum - 나만의 A4 앨범 만들기",
   description: "사진을 드래그&드롭으로 업로드하여 아름다운 A4 크기의 앨범을 만들어보세요",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body className={`${inter.className} ${nanumPenScript.variable}`}>
         <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''}>
           <AuthProvider>

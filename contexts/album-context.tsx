@@ -3,15 +3,22 @@
 import React from "react"
 import { createContext, useContext, useState, type ReactNode } from "react"
 import { useAuth } from "@/contexts/auth-context"
-import type { Photo, Album, LayoutTemplate, AlbumPage, PhotoLayout } from "@/types/album"
+import type { Photo, Album, LayoutTemplate, AlbumPage, PhotoLayout, AlbumDensity } from "@/types/album"
 import { extractPhotoDate, extractPhotoLocation } from "@/utils/photo-metadata"
+import { detectFaceCenter } from "@/utils/face-detection"
+import { buildAlbum, type PhotoSpec } from "@/lib/album-generator"
 
 interface AlbumContextType {
   photos: Photo[]
   album: Album | null
   templates: LayoutTemplate[]
   addPhotos: (files: File[]) => void
-  createAlbum: (theme: string, orientation: "portrait" | "landscape") => void
+  createAlbum: (
+    theme: string,
+    orientation: "portrait" | "landscape",
+    density?: AlbumDensity,
+    autoFaceCenter?: boolean,
+  ) => Promise<void>
   updatePage: (pageId: string, layouts: PhotoLayout[], pageUpdates?: Partial<AlbumPage>) => void
   swapPhotos: (sourceLayoutId: string, targetLayoutId: string, sourcePageId: string, targetPageId: string) => void
   insertPage: (afterPageIndex: number, newPage: AlbumPage) => void
@@ -25,6 +32,7 @@ interface AlbumContextType {
   pdfProgress: number
   setPdfProgress: (value: number) => void
   deletePhoto: (photoId: string) => void
+  toggleMetadata: () => void
 }
 
 const AlbumContext = createContext<AlbumContextType | undefined>(undefined)
@@ -64,6 +72,47 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   };
 
   const defaultTemplates: LayoutTemplate[] = [
+    // 1장 (Sparse)
+    {
+      id: "template-1-portrait",
+      name: "1장 전체",
+      photoCount: 1,
+      orientation: "portrait",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 100, height: 100 },
+      ],
+    },
+    {
+      id: "template-1-landscape",
+      name: "1장 전체",
+      photoCount: 1,
+      orientation: "landscape",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 100, height: 100 },
+      ],
+    },
+    // 2장 (Sparse)
+    {
+      id: "template-2-portrait-v",
+      name: "2장 상하",
+      photoCount: 2,
+      orientation: "portrait",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 100, height: 49 },
+        { id: "2", x: 0, y: 51, width: 100, height: 49 },
+      ],
+    },
+    {
+      id: "template-2-landscape-h",
+      name: "2장 좌우",
+      photoCount: 2,
+      orientation: "landscape",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 49, height: 100 },
+        { id: "2", x: 51, y: 0, width: 49, height: 100 },
+      ],
+    },
+    // 3장 (Medium)
     {
       id: "template-3-portrait",
       name: "3장 세로형",
@@ -75,9 +124,10 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         { id: "3", x: 51, y: 67, width: 49, height: 31 },
       ],
     },
+    // 4장 (Medium)
     {
       id: "template-4-portrait",
-      name: "4장 세로형",
+      name: "4장 그리드",
       photoCount: 4,
       orientation: "portrait",
       layouts: [
@@ -87,9 +137,24 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         { id: "4", x: 51, y: 52, width: 49, height: 48 },
       ],
     },
+    // 5장 (Medium/Dense)
+    {
+      id: "template-5-portrait",
+      name: "5장 혼합",
+      photoCount: 5,
+      orientation: "portrait",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 49, height: 32 },
+        { id: "2", x: 51, y: 0, width: 49, height: 32 },
+        { id: "3", x: 0, y: 34, width: 100, height: 32 },
+        { id: "4", x: 0, y: 68, width: 49, height: 32 },
+        { id: "5", x: 51, y: 68, width: 49, height: 32 },
+      ],
+    },
+    // 6장 (Dense)
     {
       id: "template-6-portrait",
-      name: "6장 세로형",
+      name: "6장 그리드",
       photoCount: 6,
       orientation: "portrait",
       layouts: [
@@ -99,6 +164,41 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         { id: "4", x: 0, y: 34, width: 32, height: 31 },
         { id: "5", x: 34, y: 34, width: 32, height: 31 },
         { id: "6", x: 68, y: 34, width: 32, height: 31 },
+      ],
+    },
+    // 8장 (Dense)
+    {
+      id: "template-8-portrait",
+      name: "8장 그리드",
+      photoCount: 8,
+      orientation: "portrait",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 49, height: 23 },
+        { id: "2", x: 51, y: 0, width: 49, height: 23 },
+        { id: "3", x: 0, y: 25, width: 49, height: 23 },
+        { id: "4", x: 51, y: 25, width: 49, height: 23 },
+        { id: "5", x: 0, y: 50, width: 49, height: 23 },
+        { id: "6", x: 51, y: 50, width: 49, height: 23 },
+        { id: "7", x: 0, y: 75, width: 49, height: 23 },
+        { id: "8", x: 51, y: 75, width: 49, height: 23 },
+      ],
+    },
+    // 9장 (Dense)
+    {
+      id: "template-9-portrait",
+      name: "9장 3x3",
+      photoCount: 9,
+      orientation: "portrait",
+      layouts: [
+        { id: "1", x: 0, y: 0, width: 32, height: 32 },
+        { id: "2", x: 34, y: 0, width: 32, height: 32 },
+        { id: "3", x: 68, y: 0, width: 32, height: 32 },
+        { id: "4", x: 0, y: 34, width: 32, height: 32 },
+        { id: "5", x: 34, y: 34, width: 32, height: 32 },
+        { id: "6", x: 68, y: 34, width: 32, height: 32 },
+        { id: "7", x: 0, y: 68, width: 32, height: 32 },
+        { id: "8", x: 34, y: 68, width: 32, height: 32 },
+        { id: "9", x: 68, y: 68, width: 32, height: 32 },
       ],
     },
   ]
@@ -160,138 +260,43 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setUploadProgress(0), 500)
   }
 
-  const generateRandomLayout = (
-    photoCount: number,
-    orientation: "portrait" | "landscape",
-  ): Omit<PhotoLayout, "photoId">[] => {
-    const layouts: Omit<PhotoLayout, "photoId">[] = []
-    const pageWidth = 100
-    const pageHeight = 100
-    const gap = 2
-
-    if (photoCount === 3) {
-      layouts.push(
-        { id: "layout-0", x: 0, y: 0, width: 100, height: 65, photoX: 50, photoY: 50 },
-        { id: "layout-1", x: 0, y: 67, width: 49, height: 31, photoX: 50, photoY: 50 },
-        { id: "layout-2", x: 51, y: 67, width: 49, height: 31, photoX: 50, photoY: 50 },
-      )
-    } else if (photoCount === 5) {
-      layouts.push(
-        { id: "layout-0", x: 0, y: 0, width: 49, height: 30, photoX: 50, photoY: 50 },
-        { id: "layout-1", x: 51, y: 0, width: 49, height: 30, photoX: 50, photoY: 50 },
-        { id: "layout-2", x: 0, y: 32, width: 100, height: 36, photoX: 50, photoY: 50 },
-        { id: "layout-3", x: 0, y: 70, width: 49, height: 28, photoX: 50, photoY: 50 },
-        { id: "layout-4", x: 51, y: 70, width: 49, height: 28, photoX: 50, photoY: 50 },
-      )
-    } else {
-      const cols = Math.ceil(Math.sqrt(photoCount))
-      const rows = Math.ceil(photoCount / cols)
-      const cellWidth = (pageWidth - gap * (cols - 1)) / cols
-      const cellHeight = (pageHeight - gap * (rows - 1)) / rows
-
-      for (let i = 0; i < photoCount; i++) {
-        const col = i % cols
-        const row = Math.floor(i / cols)
-        layouts.push({
-          id: `layout-${i}`,
-          x: col * (cellWidth + gap),
-          y: row * (cellHeight + gap),
-          width: cellWidth,
-          height: cellHeight,
-          photoX: 50 + (Math.random() - 0.5) * 20,
-          photoY: 50 + (Math.random() - 0.5) * 20,
-        })
-      }
-    }
-
-    return layouts
-  }
-
-  // %%%%%LAST%%%%%
-  const selectRandomTemplate = (photoCount: number, orientation: "portrait" | "landscape") => {
-    const matchingTemplates = templates.filter(
-      (t) => t.photoCount === photoCount && t.orientation === orientation,
-    )
-    if (matchingTemplates.length > 0) {
-      return matchingTemplates[Math.floor(Math.random() * matchingTemplates.length)]
-    }
-    return null
-  }
-
-  const createAlbum = (theme: string, orientation: "portrait" | "landscape") => {
+  // 레이아웃 구성 로직은 lib/album-generator.ts에 있다 (CLI와 공유)
+  const createAlbum = async (theme: string, orientation: "portrait" | "landscape", density: AlbumDensity = "medium", autoFaceCenter: boolean = false) => {
     if (photos.length === 0) return
 
-    const pages: AlbumPage[] = []
-    let remainingPhotos = [...photos]
-
-    // 첫 페이지는 표지 페이지로 생성 (사진 1장으로 전체 꽉 채움)
-    if (remainingPhotos.length > 0) {
-      const coverPhoto = remainingPhotos.shift()!
-      const coverLayout: PhotoLayout = {
-        id: "cover-layout",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        photoId: coverPhoto.id,
-        photoX: 50,
-        photoY: 50,
-      }
-
-      // 기본 타이틀: 첫 번째 사진의 촬영 날짜 사용
-      const getDefaultTitle = () => {
-        // 첫 번째 사진의 촬영 날짜가 있으면 그것을 사용
-        if (coverPhoto.date) {
-          return coverPhoto.date
-        }
-        // 없으면 현재 날짜를 사용 (fallback)
-        const now = new Date()
-        return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
-      }
-
-      pages.push({
-        id: `page-${Date.now()}-cover`,
-        layouts: [coverLayout],
-        isCoverPage: true,
-        title: getDefaultTitle(),
-        titlePosition: { x: 50, y: 85 }, // 기본 위치: 하단 중앙
-      })
-    }
-
-    // 나머지 페이지들은 기존 로직대로 생성
-    while (remainingPhotos.length > 0) {
-      const photosPerPage = Math.min(3 + Math.floor(Math.random() * 4), remainingPhotos.length)
-      const pagePhotos = remainingPhotos.splice(0, photosPerPage)
-
-      const template = selectRandomTemplate(photosPerPage, orientation)
-      let layouts: PhotoLayout[]
-
-      if (template) {
-        layouts = template.layouts.map((layout, index) => ({
-          ...layout,
-          photoId: pagePhotos[index]?.id || "",
+    // 얼굴 중심 배치를 켠 경우에만 사진별 피사체 좌표를 미리 계산
+    const specs: PhotoSpec[] = autoFaceCenter
+      ? await Promise.all(
+          photos.map(async (photo) => ({
+            id: photo.id,
+            width: photo.width,
+            height: photo.height,
+            date: photo.date,
+            subject: (await detectFaceCenter(photo.url)) ?? undefined,
+          })),
+        )
+      : photos.map((photo) => ({
+          id: photo.id,
+          width: photo.width,
+          height: photo.height,
+          date: photo.date,
         }))
-      } else {
-        const randomLayouts = generateRandomLayout(photosPerPage, orientation)
-        layouts = randomLayouts.map((layout, index) => ({
-          ...layout,
-          photoId: pagePhotos[index]?.id || "",
-        }))
-      }
 
-      pages.push({
-        id: `page-${Date.now()}-${Math.random()}`,
-        layouts,
-        templateId: template?.id,
-      })
-    }
+    setAlbum(
+      buildAlbum({
+        photos: specs,
+        templates,
+        theme,
+        orientation,
+        density,
+        focusOnSubject: autoFaceCenter,
+      }),
+    )
+  }
 
-    setAlbum({
-      id: `album-${Date.now()}`,
-      pages,
-      theme,
-      orientation,
-    })
+  const toggleMetadata = () => {
+    if (!album) return
+    setAlbum(prev => prev ? { ...prev, showMetadata: !prev.showMetadata } : null)
   }
 
   const swapPhotos = (sourceLayoutId: string, targetLayoutId: string, sourcePageId: string, targetPageId: string) => {
@@ -553,34 +558,32 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         const storageKey = getStorageKey('templates');
         const saved = localStorage.getItem(storageKey);
 
-        let userLayouts: LayoutTemplate[];
+        let userLayouts: LayoutTemplate[] = [];
 
         if (saved) {
           try {
             const parsedSavedLayouts = JSON.parse(saved) as LayoutTemplate[];
             if (Array.isArray(parsedSavedLayouts)) {
-              const filteredUserLayouts = parsedSavedLayouts.filter(
+              // Filter out server templates from local storage just in case
+              const savedUserLayouts = parsedSavedLayouts.filter(
                 (t: LayoutTemplate) => t.id && !t.id.toString().startsWith('server-')
               );
-              // If local storage existed but contained no valid user-specific templates (empty or only server-like ones),
-              // then fall back to default templates.
-              if (filteredUserLayouts.length > 0) {
-                userLayouts = filteredUserLayouts;
-              } else {
-                userLayouts = [...defaultTemplates];
-              }
+
+              // Merge saved layouts with default templates
+              // If a default template ID is NOT in saved layouts, add it.
+              // This ensures new default templates appear even for existing users.
+              const savedIds = new Set(savedUserLayouts.map(t => t.id));
+              const missingDefaults = defaultTemplates.filter(t => !savedIds.has(t.id));
+
+              userLayouts = [...savedUserLayouts, ...missingDefaults];
             } else {
-              // Parsed data is not an array, fallback to defaults
-              console.error('Saved templates format is not an array:', parsedSavedLayouts);
               userLayouts = [...defaultTemplates];
             }
           } catch (error) {
             console.error('템플릿 파싱 실패:', error);
-            // If parsing fails, use default templates
             userLayouts = [...defaultTemplates];
           }
         } else {
-          // No saved data in local storage, use default templates
           userLayouts = [...defaultTemplates];
         }
 
@@ -619,6 +622,7 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
         setUploadProgress,
         pdfProgress,
         setPdfProgress,
+        toggleMetadata,
         deletePhoto: (photoId: string) => {
           setPhotos((prev) => prev.filter((p) => p.id !== photoId))
           // Also remove from album if used

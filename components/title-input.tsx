@@ -9,21 +9,30 @@ interface TitleInputProps {
   theme: string
   onTitleChange: (title: string) => void
   onPositionChange: (position: { x: number; y: number }) => void
+  style?: { fontSize?: number; color?: string; fontFamily?: string }
+  onStyleChange?: (style: { fontSize?: number; color?: string; fontFamily?: string }) => void
 }
 
-export function TitleInput({ 
-  title, 
-  position, 
-  editMode, 
-  theme, 
-  onTitleChange, 
-  onPositionChange 
+export function TitleInput({
+  title,
+  position,
+  editMode,
+  theme,
+  onTitleChange,
+  onPositionChange,
+  style,
+  onStyleChange
 }: TitleInputProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [isEditing, setIsEditing] = useState(false)
   const [localTitle, setLocalTitle] = useState(title)
   const titleRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Default styles
+  const fontSize = style?.fontSize || 24
+  const color = style?.color || (theme === 'black' ? '#FFFFFF' : '#111827')
 
   useEffect(() => {
     setLocalTitle(title)
@@ -31,10 +40,13 @@ export function TitleInput({
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!editMode) return
+    // 편집 중일 때는 드래그 방지 (입력 필드 포커스 유지 등을 위해)
+    if (isEditing) return
+
     e.preventDefault()
     setIsDragging(true)
     setDragStart({ x: e.clientX, y: e.clientY })
-  }, [editMode])
+  }, [editMode, isEditing])
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !titleRef.current) return
@@ -91,7 +103,24 @@ export function TitleInput({
     }
   }, [handleTitleSubmit, title])
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isEditing && containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        handleTitleSubmit()
+      }
+    }
+
+    if (isEditing) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isEditing, handleTitleSubmit])
+
   const getTextColor = () => {
+    if (style?.color) return style.color
     if (theme === 'black') return 'text-white'
     return 'text-gray-900'
   }
@@ -105,10 +134,9 @@ export function TitleInput({
 
   return (
     <div
-      ref={titleRef}
-      className={`absolute select-none ${editMode ? 'cursor-move' : 'cursor-default'} ${
-        editMode ? 'hover:bg-black hover:bg-opacity-10 rounded p-1' : ''
-      }`}
+      ref={containerRef}
+      className={`absolute select-none ${editMode && !isEditing ? 'cursor-move' : 'cursor-default'} ${editMode && !isEditing ? 'hover:bg-black hover:bg-opacity-10 rounded p-1' : ''
+        }`}
       style={{
         left: `${position.x}%`,
         top: `${position.y}%`,
@@ -119,25 +147,57 @@ export function TitleInput({
       onDoubleClick={handleDoubleClick}
     >
       {isEditing ? (
-        <input
-          type="text"
-          value={localTitle}
-          onChange={(e) => setLocalTitle(e.target.value)}
-          onBlur={handleTitleSubmit}
-          onKeyDown={handleKeyDown}
-          className={`text-center text-2xl font-bold px-2 py-1 border rounded ${getEditStyles()}`}
-          autoFocus
-          style={{ 
-            minWidth: '200px',
-            whiteSpace: 'nowrap'
-          }}
-        />
+        <div className="flex flex-col items-center gap-2">
+          {/* Style Toolbar */}
+          <div
+            className="flex items-center gap-2 bg-white p-1.5 rounded shadow-lg border border-gray-200 mb-1"
+            onMouseDown={(e) => e.stopPropagation()} // 툴바 클릭 시 드래그/이벤트 전파 방지
+          >
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">크기</span>
+              <input
+                type="number"
+                value={fontSize}
+                onChange={(e) => onStyleChange?.({ ...style, fontSize: Number(e.target.value) })}
+                className="w-12 px-1 py-0.5 text-xs border rounded text-black"
+                min="12"
+                max="100"
+              />
+            </div>
+            <div className="w-px h-4 bg-gray-200 mx-1"></div>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">색상</span>
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => onStyleChange?.({ ...style, color: e.target.value })}
+                className="w-6 h-6 p-0 border-0 rounded cursor-pointer"
+              />
+            </div>
+          </div>
+
+          <input
+            type="text"
+            value={localTitle}
+            onChange={(e) => setLocalTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className={`text-center font-bold px-2 py-1 border rounded ${getEditStyles()}`}
+            autoFocus
+            style={{
+              minWidth: '200px',
+              whiteSpace: 'nowrap',
+              fontSize: `${fontSize}px`,
+              color: color
+            }}
+          />
+        </div>
       ) : (
         <div
-          className={`text-2xl font-bold text-center px-2 py-1 ${getTextColor()} ${
-            theme === 'black' ? 'text-shadow-lg' : 'drop-shadow-lg'
-          }`}
+          className={`font-bold text-center px-2 py-1 ${theme === 'black' ? 'text-shadow-lg' : 'drop-shadow-lg'
+            }`}
           style={{
+            fontSize: `${fontSize}px`,
+            color: style?.color || (theme === 'black' ? '#FFFFFF' : '#111827'),
             textShadow: theme === 'black' ? '2px 2px 4px rgba(255,255,255,0.3)' : '2px 2px 4px rgba(0,0,0,0.3)',
             whiteSpace: 'nowrap',
             minWidth: 'max-content'

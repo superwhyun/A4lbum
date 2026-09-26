@@ -96,38 +96,38 @@ function createTextImage(
 ): { imageData: string; width: number; height: number } {
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")!
-  
+
   // 폰트 설정 - 나눔펜스크립트
   ctx.font = `${fontSize}px 'Nanum Pen Script', cursive`
   ctx.fillStyle = textColor
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  
+
   // 텍스트 크기 측정
   const textMetrics = ctx.measureText(text)
   const textWidth = textMetrics.width
   const textHeight = fontSize * 1.2 // 대략적인 텍스트 높이
-  
+
   // Canvas 크기 설정 (패딩 포함)
   const padding = 10
   canvas.width = textWidth + padding * 2
   canvas.height = textHeight + padding * 2
-  
+
   // 폰트 재설정 (canvas 크기 변경으로 리셋됨)
   ctx.font = `${fontSize}px 'Nanum Pen Script', cursive`
   ctx.fillStyle = textColor
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  
+
   // 텍스트 그림자 효과 (가독성 향상)
   ctx.shadowColor = textColor === "#FFFFFF" ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.3)"
   ctx.shadowBlur = 2
   ctx.shadowOffsetX = 1
   ctx.shadowOffsetY = 1
-  
+
   // 텍스트 렌더링
   ctx.fillText(text, canvas.width / 2, canvas.height / 2)
-  
+
   // PNG로 변환 (투명 배경 유지)
   return {
     imageData: canvas.toDataURL("image/png"),
@@ -162,35 +162,35 @@ function renderMetadataToPDF(
 
   // 텍스트 색상 (흰색 고정)
   const textColor = '#FFFFFF'
-  
+
   // 폰트 크기 (PDF용으로 더 크게)
   const fontSize = 24 // PDF에서 보기 좋은 크기
-  
+
   // 메타정보를 이미지로 변환
   const textImage = createTextImage(metadataText, textColor, fontSize)
-  
+
   // px → mm 변환
   const PX_TO_MM = 25.4 / 96
   const textWidth = textImage.width * PX_TO_MM
   const textHeight = textImage.height * PX_TO_MM
-  
+
   // 배경 박스 크기 및 위치 (프레임 하단) - 매우 얇게
   const boxHeight = textHeight * 0.52 // 텍스트 높이의 절반 정도로 매우 얇게
   const boxY = frameY + frameHeight - boxHeight
-  
+
   // 반투명 검은색 배경 박스
   pdf.setFillColor(0, 0, 0) // 검은색
   pdf.setDrawColor(0, 0, 0)
   pdf.setGState(pdf.GState({ opacity: 0.3 })) // 30% 불투명도
   pdf.rect(frameX, boxY, frameWidth, boxHeight, 'F')
-  
+
   // 불투명도 리셋
   pdf.setGState(pdf.GState({ opacity: 1.0 }))
-  
+
   // 텍스트 위치 (오른쪽 정렬)
   const textX = frameX + frameWidth - textWidth - 2 // 오른쪽에서 2mm 여백
   const textY = boxY + (boxHeight - textHeight) / 2
-  
+
   // 텍스트 렌더링
   pdf.addImage(
     textImage.imageData,
@@ -215,23 +215,23 @@ function renderTitleToPDF(
 
   const { title, titlePosition } = page
   const textColor = THEME_TEXT_COLORS[theme] || "#1F2937"
-  
+
   // 위치 좌표 변환 (% → mm)
   const pageWidth = orientation === "portrait" ? A4_SIZE.WIDTH : A4_SIZE.HEIGHT
   const pageHeight = orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH
-  
+
   const titleX = (titlePosition.x / 100) * pageWidth
   const titleY = (titlePosition.y / 100) * pageHeight
-  
+
   // 텍스트를 이미지로 변환 (크기 2배)
   const textImage = createTextImage(title, textColor, 48)
-  
+
   // 실제 Canvas 크기를 기반으로 PDF 크기 계산
   // px → mm 변환 (96 DPI 기준: 1 inch = 25.4mm, 96px = 25.4mm)
   const PX_TO_MM = 25.4 / 96
   const pdfWidth = textImage.width * PX_TO_MM
   const pdfHeight = textImage.height * PX_TO_MM
-  
+
   // PDF에 이미지 삽입 (중앙 정렬)
   pdf.addImage(
     textImage.imageData,
@@ -244,14 +244,15 @@ function renderTitleToPDF(
 }
 
 /**
- * PDF로 앨범 내보내기 (고해상도, crop/position 반영)
+ * 앨범을 jsPDF 문서로 렌더링 (고해상도, crop/position 반영).
+ * 저장/다운로드는 하지 않으므로 헤드리스 렌더링에서도 그대로 재사용할 수 있다.
  */
-export async function exportAlbumToPDF(
+export async function buildAlbumPdf(
   album: Album,
   photosInput: Photo[] | Record<string, Photo>,
-  onProgress?: (percent: number) => void
-) {
-  console.log("exportAlbumToPDF called", { album, photosInput });
+  onProgress?: (percent: number) => void,
+  showMetadata: boolean = true
+): Promise<jsPDF> {
   // photosInput이 배열이 아니면 Object.values로 배열화
   const photos: Photo[] = Array.isArray(photosInput) ? photosInput : Object.values(photosInput)
 
@@ -374,7 +375,7 @@ export async function exportAlbumToPDF(
       )
 
       // 메타정보 렌더링 (표지 페이지가 아닌 경우에만)
-      if (!page.isCoverPage && photo && (photo.date || photo.location)) {
+      if (showMetadata && !page.isCoverPage && photo && (photo.date || photo.location)) {
         renderMetadataToPDF(pdf, photo, pdfFrameX, pdfFrameY, pdfFrameW, pdfFrameH, album.theme)
       }
     }
@@ -387,10 +388,41 @@ export async function exportAlbumToPDF(
     }
   }
 
+  return pdf
+}
+
+/**
+ * PDF로 앨범 내보내기 (브라우저 다운로드 포함)
+ */
+export async function exportAlbumToPDF(
+  album: Album,
+  photosInput: Photo[] | Record<string, Photo>,
+  onProgress?: (percent: number) => void,
+  showMetadata: boolean = true
+) {
+  console.log("exportAlbumToPDF called", { album, photosInput, showMetadata });
+
+  const pdf = await buildAlbumPdf(album, photosInput, onProgress, showMetadata)
+
   // PDF 다운로드
   const fileName = `album-${new Date().toISOString().split("T")[0]}.pdf`
-  pdf.save(fileName)
+
+  // 방법 1: pdf.save() 시도 (Safari/Firefox용)
+  try {
+    pdf.save(fileName)
+    console.log("pdf.save() 호출 완료")
+  } catch (e) {
+    console.warn("pdf.save() 실패:", e)
+  }
+
+  // 방법 2: Blob URL 생성하여 반환 (Chrome용 백업)
+  const pdfBlob = pdf.output("blob")
+  const blobUrl = URL.createObjectURL(pdfBlob)
+
   if (onProgress) {
     setTimeout(() => onProgress(0), 500)
   }
+
+  // 다운로드 URL 반환
+  return { url: blobUrl, fileName }
 }

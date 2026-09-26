@@ -76,7 +76,7 @@ export const defaultTemplates: DefaultTemplate[] = [
       ]
     }
   },
-  
+
   // 2장 템플릿 (6개)
   {
     name: "2장 세로형 - 상하 분할",
@@ -144,7 +144,7 @@ export const defaultTemplates: DefaultTemplate[] = [
       ]
     }
   },
-  
+
   // 3장 템플릿 (6개)
   {
     name: "3장 세로형 - 큰사진 + 2개 작은사진",
@@ -218,7 +218,7 @@ export const defaultTemplates: DefaultTemplate[] = [
       ]
     }
   },
-  
+
   // 4장 템플릿 (6개)
   {
     name: "4장 세로형 - 2x2 그리드",
@@ -298,7 +298,7 @@ export const defaultTemplates: DefaultTemplate[] = [
       ]
     }
   },
-  
+
   // 5장 템플릿 (6개)
   {
     name: "5장 세로형 - 큰사진 + 4개 작은사진",
@@ -384,7 +384,7 @@ export const defaultTemplates: DefaultTemplate[] = [
       ]
     }
   },
-  
+
   // 6장 템플릿 (6개)
   {
     name: "6장 세로형 - 2x3 그리드",
@@ -473,6 +473,78 @@ export const defaultTemplates: DefaultTemplate[] = [
         { id: "layout-3", x: 3, y: 65, width: 30, height: 32 },
         { id: "layout-4", x: 35, y: 65, width: 30, height: 32 },
         { id: "layout-5", x: 67, y: 65, width: 30, height: 32 }
+      ]
+    }
+  },
+  {
+    name: "8장 세로형 - 2x4 그리드",
+    config: {
+      photoCount: 8,
+      orientation: "portrait",
+      layouts: [
+        { id: "layout-0", x: 3, y: 3, width: 46, height: 22 },
+        { id: "layout-1", x: 51, y: 3, width: 46, height: 22 },
+        { id: "layout-2", x: 3, y: 27, width: 46, height: 22 },
+        { id: "layout-3", x: 51, y: 27, width: 46, height: 22 },
+        { id: "layout-4", x: 3, y: 51, width: 46, height: 22 },
+        { id: "layout-5", x: 51, y: 51, width: 46, height: 22 },
+        { id: "layout-6", x: 3, y: 75, width: 46, height: 22 },
+        { id: "layout-7", x: 51, y: 75, width: 46, height: 22 }
+      ]
+    }
+  },
+  {
+    name: "8장 가로형 - 4x2 그리드",
+    config: {
+      photoCount: 8,
+      orientation: "landscape",
+      layouts: [
+        { id: "layout-0", x: 3, y: 3, width: 22, height: 46 },
+        { id: "layout-1", x: 27, y: 3, width: 22, height: 46 },
+        { id: "layout-2", x: 51, y: 3, width: 22, height: 46 },
+        { id: "layout-3", x: 75, y: 3, width: 22, height: 46 },
+        { id: "layout-4", x: 3, y: 51, width: 22, height: 46 },
+        { id: "layout-5", x: 27, y: 51, width: 22, height: 46 },
+        { id: "layout-6", x: 51, y: 51, width: 22, height: 46 },
+        { id: "layout-7", x: 75, y: 51, width: 22, height: 46 }
+      ]
+    }
+  },
+
+  // 9장 템플릿 (2개)
+  {
+    name: "9장 세로형 - 3x3 그리드",
+    config: {
+      photoCount: 9,
+      orientation: "portrait",
+      layouts: [
+        { id: "layout-0", x: 3, y: 3, width: 30, height: 30 },
+        { id: "layout-1", x: 35, y: 3, width: 30, height: 30 },
+        { id: "layout-2", x: 67, y: 3, width: 30, height: 30 },
+        { id: "layout-3", x: 3, y: 35, width: 30, height: 30 },
+        { id: "layout-4", x: 35, y: 35, width: 30, height: 30 },
+        { id: "layout-5", x: 67, y: 35, width: 30, height: 30 },
+        { id: "layout-6", x: 3, y: 67, width: 30, height: 30 },
+        { id: "layout-7", x: 35, y: 67, width: 30, height: 30 },
+        { id: "layout-8", x: 67, y: 67, width: 30, height: 30 }
+      ]
+    }
+  },
+  {
+    name: "9장 가로형 - 3x3 그리드",
+    config: {
+      photoCount: 9,
+      orientation: "landscape",
+      layouts: [
+        { id: "layout-0", x: 3, y: 3, width: 30, height: 30 },
+        { id: "layout-1", x: 35, y: 3, width: 30, height: 30 },
+        { id: "layout-2", x: 67, y: 3, width: 30, height: 30 },
+        { id: "layout-3", x: 3, y: 35, width: 30, height: 30 },
+        { id: "layout-4", x: 35, y: 35, width: 30, height: 30 },
+        { id: "layout-5", x: 67, y: 35, width: 30, height: 30 },
+        { id: "layout-6", x: 3, y: 67, width: 30, height: 30 },
+        { id: "layout-7", x: 35, y: 67, width: 30, height: 30 },
+        { id: "layout-8", x: 67, y: 67, width: 30, height: 30 }
       ]
     }
   }

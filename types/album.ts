@@ -1,12 +1,15 @@
 export interface Photo {
   id: string
-  file: File
+  /** 브라우저에서 업로드된 원본 파일. CLI 렌더링 경로에서는 없음 */
+  file?: File
   url: string
   width: number
   height: number
   thumbnailUrl?: string
   date?: string;
   location?: string;
+  /** CLI 경로에서 원본 이미지의 로컬 파일 경로 */
+  path?: string;
 }
 
 export interface PhotoLayout {
@@ -18,6 +21,7 @@ export interface PhotoLayout {
   photoId: string
   photoX?: number // 사진의 X 위치 (0-100%)
   photoY?: number // 사진의 Y 위치 (0-100%)
+  photoScale?: number // 사진 확대 배율 (기본 1)
 }
 
 export interface AlbumPage {
@@ -27,6 +31,11 @@ export interface AlbumPage {
   isCoverPage?: boolean
   title?: string
   titlePosition?: { x: number; y: number }
+  titleStyle?: {
+    fontSize?: number;
+    color?: string;
+    fontFamily?: string;
+  }
 }
 
 export interface Album {
@@ -34,6 +43,7 @@ export interface Album {
   pages: AlbumPage[]
   theme: string
   orientation: "portrait" | "landscape"
+  showMetadata?: boolean
 }
 
 export interface LayoutTemplate {
@@ -61,6 +71,8 @@ export const THEMES = [
 ] as const
 
 export type Theme = (typeof THEMES)[number]
+
+export type AlbumDensity = "sparse" | "medium" | "dense"
 
 // A4 크기 상수 (mm 단위)
 export const A4_SIZE = {

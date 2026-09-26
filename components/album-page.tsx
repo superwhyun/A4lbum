@@ -15,11 +15,13 @@ interface AlbumPageProps {
   editMode: boolean
   selectedPhoto: { layoutId: string; pageId: string } | null
   onPhotoSelect: (layoutId: string, pageId: string) => void
+  onPhotoContextMenu?: (layoutId: string, pageId: string) => void
+  showMetadata?: boolean
 }
 
-export function AlbumPage({ page, photos, theme, orientation, editMode, selectedPhoto, onPhotoSelect }: AlbumPageProps) {
+export function AlbumPage({ page, photos, theme, orientation, editMode, selectedPhoto, onPhotoSelect, onPhotoContextMenu, showMetadata = true }: AlbumPageProps) {
   const { updatePage } = useAlbum()
-  
+
   // 로컬 상태 제거하고 직접 page.layouts 사용
   const layouts = page.layouts
 
@@ -51,6 +53,10 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
 
   const handleTitlePositionChange = (newPosition: { x: number; y: number }) => {
     updatePage(page.id, layouts, { titlePosition: newPosition })
+  }
+
+  const handleTitleStyleChange = (newStyle: { fontSize?: number; color?: string; fontFamily?: string }) => {
+    updatePage(page.id, layouts, { titleStyle: { ...page.titleStyle, ...newStyle } })
   }
 
   // A4 비율과 여백 계산 - 상하좌우 동일한 여백
@@ -87,12 +93,14 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
               isSelected={selectedPhoto?.layoutId === layout.id && selectedPhoto?.pageId === page.id}
               onLayoutChange={(newLayout) => handleLayoutChange(layout.id, newLayout)}
               onPhotoSelect={onPhotoSelect}
+              onPhotoContextMenu={onPhotoContextMenu}
               theme={theme}
               isCoverPage={page.isCoverPage}
+              showMetadata={showMetadata}
             />
           )
         })}
-        
+
         {/* 표지 페이지 타이틀 */}
         {page.isCoverPage && (
           <TitleInput
@@ -102,6 +110,8 @@ export function AlbumPage({ page, photos, theme, orientation, editMode, selected
             theme={theme}
             onTitleChange={handleTitleChange}
             onPositionChange={handleTitlePositionChange}
+            style={page.titleStyle}
+            onStyleChange={handleTitleStyleChange}
           />
         )}
       </div>

@@ -13,10 +13,12 @@ interface PhotoFrameProps {
   isSelected: boolean
   onLayoutChange: (newLayout: Partial<PhotoLayout>) => void
   onPhotoSelect: (layoutId: string, pageId: string) => void
+  onPhotoContextMenu?: (layoutId: string, pageId: string) => void;
   metadataTextColor?: string;
   metadataTextSize?: string;
   theme?: string;
   isCoverPage?: boolean;
+  showMetadata?: boolean;
 }
 
 export function PhotoFrame({
@@ -27,10 +29,12 @@ export function PhotoFrame({
   isSelected,
   onLayoutChange,
   onPhotoSelect,
+  onPhotoContextMenu,
   metadataTextColor,
   metadataTextSize,
   theme,
-  isCoverPage = false
+  isCoverPage = false,
+  showMetadata = true
 }: PhotoFrameProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
@@ -81,6 +85,18 @@ export function PhotoFrame({
       onPhotoSelect(layout.id, pageId)
     },
     [editMode, isDragging, layout.id, pageId, onPhotoSelect],
+  )
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if (!editMode) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (onPhotoContextMenu) {
+        onPhotoContextMenu(layout.id, pageId)
+      }
+    },
+    [editMode, layout.id, pageId, onPhotoContextMenu]
   )
 
   const handleMouseMove = useCallback(
@@ -137,18 +153,18 @@ export function PhotoFrame({
     <div
       ref={frameRef}
       className={`absolute overflow-hidden rounded-md shadow-sm transition-all duration-200 ${isEmpty
-          ? editMode
-            ? `border-2 border-dashed cursor-pointer ${isSelected
-              ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105 z-10"
-              : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-25"
-            }`
-            : "border border-gray-200 bg-gray-50"
-          : editMode
-            ? `border-2 ${isSelected
-              ? "border-blue-500 shadow-lg transform scale-105 z-10 cursor-move"
-              : "border-transparent hover:border-blue-300 cursor-pointer"
-            }`
-            : "border border-gray-200"
+        ? editMode
+          ? `border-2 border-dashed cursor-pointer ${isSelected
+            ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105 z-10"
+            : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-25"
+          }`
+          : "border border-gray-200 bg-gray-50"
+        : editMode
+          ? `border-2 ${isSelected
+            ? "border-blue-500 shadow-lg transform scale-105 z-10 cursor-move"
+            : "border-transparent hover:border-blue-300 cursor-pointer"
+          }`
+          : "border border-gray-200"
         }`}
       style={{
         left: `${layout.x}%`,
@@ -158,6 +174,7 @@ export function PhotoFrame({
       }}
       onMouseDown={isEmpty ? undefined : handleMouseDown}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
     >
       {isEmpty ? (
         // 빈 슬롯 표시
@@ -202,7 +219,7 @@ export function PhotoFrame({
               </div>
             </div>
           )}
-          {!isCoverPage && photo && (photo.date || photo.location) && (
+          {!isCoverPage && showMetadata && photo && (photo.date || photo.location) && (
             <div
               className={`absolute bottom-0 left-0 right-0 px-1.5 py-0.5 bg-black bg-opacity-30 pointer-events-none text-[10px] text-right font-nanum-pen`}
               style={{ color: metadataTextColor || '#FFFFFF' }}

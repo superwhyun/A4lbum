@@ -183,7 +183,7 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
             { x: 52.5, y: 28.5, width: 21, height: 21 }, { x: 75.5, y: 28.5, width: 21, height: 21 },
           ]),
         });
-         samples.push({
+        samples.push({
           name: "Landscape Quint - Horizontal Center + Top/Bottom",
           layouts: createLayouts([
             { x: 5, y: 5, width: 90, height: 28 },
@@ -223,6 +223,68 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
             { x: 5, y: 5, width: 42.5, height: 28 }, { x: 52.5, y: 5, width: 42.5, height: 28 },
             { x: 5, y: 36, width: 42.5, height: 28 }, { x: 52.5, y: 36, width: 42.5, height: 28 },
             { x: 5, y: 67, width: 42.5, height: 28 }, { x: 52.5, y: 67, width: 42.5, height: 28 },
+          ]),
+        });
+      }
+    } else if (count === 7) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Sept - 1 Large, 6 Small",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 90, height: 40 },
+            { x: 5, y: 47, width: 28, height: 25 }, { x: 36, y: 47, width: 28, height: 25 }, { x: 67, y: 47, width: 28, height: 25 },
+            { x: 5, y: 74, width: 28, height: 21 }, { x: 36, y: 74, width: 28, height: 21 }, { x: 67, y: 74, width: 28, height: 21 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Sept - 1 Large, 6 Small",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 40, height: 90 },
+            { x: 47, y: 5, width: 25, height: 28 }, { x: 47, y: 36, width: 25, height: 28 }, { x: 47, y: 67, width: 25, height: 28 },
+            { x: 74, y: 5, width: 21, height: 28 }, { x: 74, y: 36, width: 21, height: 28 }, { x: 74, y: 67, width: 21, height: 28 },
+          ]),
+        });
+      }
+    } else if (count === 8) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Oct - 2x4 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 2, width: 42.5, height: 22 }, { x: 52.5, y: 2, width: 42.5, height: 22 },
+            { x: 5, y: 26, width: 42.5, height: 22 }, { x: 52.5, y: 26, width: 42.5, height: 22 },
+            { x: 5, y: 50, width: 42.5, height: 22 }, { x: 52.5, y: 50, width: 42.5, height: 22 },
+            { x: 5, y: 74, width: 42.5, height: 22 }, { x: 52.5, y: 74, width: 42.5, height: 22 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Oct - 4x2 Grid",
+          layouts: createLayouts([
+            { x: 2, y: 5, width: 22, height: 42.5 }, { x: 26, y: 5, width: 22, height: 42.5 },
+            { x: 50, y: 5, width: 22, height: 42.5 }, { x: 74, y: 5, width: 22, height: 42.5 },
+            { x: 2, y: 52.5, width: 22, height: 42.5 }, { x: 26, y: 52.5, width: 22, height: 42.5 },
+            { x: 50, y: 52.5, width: 22, height: 42.5 }, { x: 74, y: 52.5, width: 22, height: 42.5 },
+          ]),
+        });
+      }
+    } else if (count === 9) {
+      if (orient === 'portrait') {
+        samples.push({
+          name: "Portrait Non - 3x3 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 28, height: 28 }, { x: 36, y: 5, width: 28, height: 28 }, { x: 67, y: 5, width: 28, height: 28 },
+            { x: 5, y: 36, width: 28, height: 28 }, { x: 36, y: 36, width: 28, height: 28 }, { x: 67, y: 36, width: 28, height: 28 },
+            { x: 5, y: 67, width: 28, height: 28 }, { x: 36, y: 67, width: 28, height: 28 }, { x: 67, y: 67, width: 28, height: 28 },
+          ]),
+        });
+      } else { // landscape
+        samples.push({
+          name: "Landscape Non - 3x3 Grid",
+          layouts: createLayouts([
+            { x: 5, y: 5, width: 28, height: 28 }, { x: 36, y: 5, width: 28, height: 28 }, { x: 67, y: 5, width: 28, height: 28 },
+            { x: 5, y: 36, width: 28, height: 28 }, { x: 36, y: 36, width: 28, height: 28 }, { x: 67, y: 36, width: 28, height: 28 },
+            { x: 5, y: 67, width: 28, height: 28 }, { x: 36, y: 67, width: 28, height: 28 }, { x: 67, y: 67, width: 28, height: 28 },
           ]),
         });
       }
@@ -293,10 +355,10 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
 
     const preview = previewRef.current;
     const rect = preview.getBoundingClientRect();
-    
+
     const deltaX = e.clientX - dragStart.x;
     const deltaY = e.clientY - dragStart.y;
-    
+
     const moveX = (deltaX / rect.width) * 100;
     const moveY = (deltaY / rect.height) * 100;
 
@@ -312,7 +374,7 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
         } else if (isResizing) {
           // 리사이즈: 크기 조정
           let newLayout = { ...layout };
-          
+
           if (resizeHandle.includes('right')) {
             newLayout.width = Math.max(5, Math.min(100 - layout.x, layout.width + moveX));
           }
@@ -331,7 +393,7 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
             newLayout.height = newHeight;
             newLayout.y = newY;
           }
-          
+
           return newLayout;
         }
       }
@@ -405,7 +467,7 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
               onChange={(e) => handlePhotoCountChange(Number(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {[1, 2, 3, 4, 5, 6].map(count => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(count => (
                 <option key={count} value={count}>{count}장</option>
               ))}
             </select>
@@ -481,13 +543,12 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
         <p className="text-sm text-gray-600 mb-4">
           사진 프레임을 드래그해서 이동하거나, 모서리를 드래그해서 크기를 조정하세요
         </p>
-        
+
         <div className="flex justify-center">
-          <div 
+          <div
             ref={previewRef}
-            className={`relative bg-gray-50 border-2 border-dashed border-gray-300 ${
-              orientation === 'landscape' ? 'w-80 h-56' : 'w-56 h-80'
-            }`}
+            className={`relative bg-gray-50 border-2 border-dashed border-gray-300 ${orientation === 'landscape' ? 'w-80 h-56' : 'w-56 h-80'
+              }`}
             style={{
               backgroundImage: showGrid ? `
                 linear-gradient(to right, #e5e7eb 1px, transparent 1px),
@@ -499,11 +560,10 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
             {layouts.map((layout, index) => (
               <div
                 key={layout.id}
-                className={`absolute bg-blue-100 border-2 rounded transition-all ${
-                  selectedLayoutId === layout.id 
-                    ? 'border-blue-500 shadow-lg z-10' 
-                    : 'border-blue-300 hover:border-blue-400'
-                }`}
+                className={`absolute bg-blue-100 border-2 rounded transition-all ${selectedLayoutId === layout.id
+                  ? 'border-blue-500 shadow-lg z-10'
+                  : 'border-blue-300 hover:border-blue-400'
+                  }`}
                 style={{
                   left: `${layout.x}%`,
                   top: `${layout.y}%`,
@@ -516,42 +576,42 @@ export default function TemplateEditor({ onSave, onCancel, template }: TemplateE
                 <div className="w-full h-full flex items-center justify-center">
                   <span className="text-blue-600 font-medium text-sm">{index + 1}</span>
                 </div>
-                
+
                 {/* 리사이즈 핸들 */}
                 {selectedLayoutId === layout.id && (
                   <>
                     {/* 모서리 핸들 */}
-                    <div 
+                    <div
                       className="absolute w-2 h-2 bg-blue-500 rounded-full -top-1 -left-1 cursor-nw-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'top-left')}
                     />
-                    <div 
+                    <div
                       className="absolute w-2 h-2 bg-blue-500 rounded-full -top-1 -right-1 cursor-ne-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'top-right')}
                     />
-                    <div 
+                    <div
                       className="absolute w-2 h-2 bg-blue-500 rounded-full -bottom-1 -left-1 cursor-sw-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'bottom-left')}
                     />
-                    <div 
+                    <div
                       className="absolute w-2 h-2 bg-blue-500 rounded-full -bottom-1 -right-1 cursor-se-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'bottom-right')}
                     />
-                    
+
                     {/* 중간 핸들 */}
-                    <div 
+                    <div
                       className="absolute w-2 h-1 bg-blue-500 rounded -top-0.5 left-1/2 transform -translate-x-1/2 cursor-n-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'top')}
                     />
-                    <div 
+                    <div
                       className="absolute w-2 h-1 bg-blue-500 rounded -bottom-0.5 left-1/2 transform -translate-x-1/2 cursor-s-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'bottom')}
                     />
-                    <div 
+                    <div
                       className="absolute w-1 h-2 bg-blue-500 rounded -left-0.5 top-1/2 transform -translate-y-1/2 cursor-w-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'left')}
                     />
-                    <div 
+                    <div
                       className="absolute w-1 h-2 bg-blue-500 rounded -right-0.5 top-1/2 transform -translate-y-1/2 cursor-e-resize"
                       onMouseDown={(e) => handleResizeMouseDown(e, layout.id, 'right')}
                     />

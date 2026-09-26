@@ -28,3 +28,6 @@ next-env.d.ts
 
 # database
 /data/*.db
+
+# tooling caches
+.serena/
