@@ -23,6 +23,21 @@ export function AlbumViewer() {
   const [pdfDownloadUrl, setPdfDownloadUrl] = useState<string | null>(null)
   const [pdfFileName, setPdfFileName] = useState<string>("")
 
+  // Center the selected page in the scroll area when currentPage changes.
+  // 훅은 조기 return보다 앞에 있어야 렌더마다 호출 순서가 유지된다.
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    const page = pageRefs.current[currentPage]
+    if (container && page) {
+      const containerRect = container.getBoundingClientRect()
+      const pageRect = page.getBoundingClientRect()
+      const scrollLeft = container.scrollLeft
+      const offset = pageRect.left - containerRect.left
+      const centerOffset = offset - (containerRect.width / 2) + (pageRect.width / 2)
+      container.scrollTo({ left: scrollLeft + centerOffset, behavior: "smooth" })
+    }
+  }, [currentPage, album?.pages.length])
+
   if (!album || album.pages.length === 0) {
     return (
       <div className="text-center py-12">
@@ -38,20 +53,6 @@ export function AlbumViewer() {
   const prevPage = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 0))
   }
-
-  // Center the selected page in the scroll area when currentPage changes
-  useEffect(() => {
-    const container = scrollContainerRef.current
-    const page = pageRefs.current[currentPage]
-    if (container && page) {
-      const containerRect = container.getBoundingClientRect()
-      const pageRect = page.getBoundingClientRect()
-      const scrollLeft = container.scrollLeft
-      const offset = pageRect.left - containerRect.left
-      const centerOffset = offset - (containerRect.width / 2) + (pageRect.width / 2)
-      container.scrollTo({ left: scrollLeft + centerOffset, behavior: "smooth" })
-    }
-  }, [currentPage, album.pages.length])
 
   const handlePhotoSelect = (layoutId: string, pageId: string) => {
     if (!editMode) return
