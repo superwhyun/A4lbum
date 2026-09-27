@@ -63,13 +63,24 @@ export class PostgresAdapter implements DatabaseAdapter {
       const result = await client.query('SELECT * FROM users WHERE username = $1', ['admin']);
       
       if (result.rows.length === 0) {
-        const hashedPassword = bcrypt.hashSync('admin', 10);
-        await client.query(
-          'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
-          ['admin', hashedPassword, 'admin']
-        );
+        // 초기 비밀번호를 환경변수로만 받는다. 예전처럼 'admin'을 기본값으로 심으면
+        // 배포된 인스턴스마다 admin/admin으로 관리자 로그인이 뚫린다.
+        const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
+
+        if (initialPassword) {
+          const hashedPassword = bcrypt.hashSync(initialPassword, 10);
+          await client.query(
+            'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+            ['admin', hashedPassword, 'admin']
+          );
+        } else {
+          console.warn(
+            'ADMIN_INITIAL_PASSWORD가 없어 관리자 계정을 만들지 않았습니다. ' +
+              '관리자가 필요하면 환경변수를 설정하세요.'
+          );
+        }
       }
-      
+
       client.release();
     } catch (error) {
       // 관리자 초기화 실패 시 무시

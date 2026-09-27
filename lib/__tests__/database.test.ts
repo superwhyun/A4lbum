@@ -1,217 +1,166 @@
-import Database from 'better-sqlite3';
-import type { Database as DBType } from 'better-sqlite3';
-import {
-  createUser,
-  getUserByUsername,
-  getUserByGoogleId,
-  findOrCreateUserByGoogleId,
-} from '../database'; // Adjust path as needed, assuming this file is in lib/__tests__
-import bcrypt from 'bcryptjs';
+/**
+ * 실제 SQLiteAdapter를 인메모리 DB에 붙여 검증한다.
+ * (예전 버전은 모듈을 목으로 바꾼 뒤 그 안에서 SQL을 재구현해, 목 자신을 테스트하고 있었다)
+ */
+import { SQLiteAdapter } from '@/lib/database-sqlite';
 
-// Original dbPath from database.ts - we need to override this for tests
-// const dbPath = path.join(process.cwd(), 'data', 'app.db');
+const IN_MEMORY = ':memory:';
 
-// Hold the in-memory database instance
-let testDb: DBType;
+function createAdapter(): SQLiteAdapter {
+  return new SQLiteAdapter(IN_MEMORY);
+}
 
-const initializeTestDb = () => {
-  testDb = new Database(':memory:');
-  // Recreate schema for users table (mirroring structure in database.ts)
-  testDb.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      password TEXT,
-      role TEXT DEFAULT 'user',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      google_id TEXT UNIQUE,
-      email TEXT,
-      profile_image_url TEXT
-    )
-  `);
-};
-
-// Override the database instance used by the functions
-// This is a common way to mock dependencies in Jest
-jest.mock('../database', () => {
-  const originalModule = jest.requireActual('../database');
-  return {
-    ...originalModule,
-    // Override `db` export from the original module
-    // This requires `db` to be exported from database.ts if it's not already for this to work,
-    // or functions must accept `db` as a parameter.
-    // For simplicity, we assume functions use a module-level `db` instance.
-    // A more robust way is to refactor functions to accept `db` or use a class.
-    // Given the current structure, we'll mock the module-level `db` instance.
-    // This is tricky if `db` is not exported. Let's assume functions are refactored or `db` is exported.
-    // If not, we'd have to re-implement the functions here with testDb.
-    // For now, this mock will try to point to an internal (mocked) db.
-
-    // Re-directing functions to use testDb by re-exporting them with testDb bound
-    // This is a bit of a workaround. Ideally, database.ts would export db or allow db injection.
-    // Since it doesn't, we re-implement simplified versions or mock `better-sqlite3` itself.
-
-    // Simpler approach for now: Re-initialize the actual 'db' from database.ts to be our in-memory one.
-    // This requires modifying the actual 'db' instance.
-    // This is generally bad practice for unit tests (modifying internals of module under test).
-    // A better way: The module `database.ts` should export its `db` instance or a setter for it.
-    // Or, `initializeTestDb` should be called within `database.ts` under a test environment flag.
-
-    // Let's try to mock `better-sqlite3` to control the db instance.
-    __esModule: true, // Mark as ES Module
-    default: testDb, // Default export (if database.ts exports db as default)
-    
-    // Mock specific functions to use testDb
-    createUser: (...args: any[]) => {
-        const [username, password, googleId, email, profileImageUrl] = args;
-        const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
-        return testDb.prepare(
-            'INSERT INTO users (username, password, google_id, email, profile_image_url) VALUES (?, ?, ?, ?, ?)'
-        ).run(username, hashedPassword, googleId, email, profileImageUrl);
-    },
-    getUserByUsername: (username: string) => {
-        return testDb.prepare('SELECT * FROM users WHERE username = ?').get(username);
-    },
-    getUserByGoogleId: (googleId: string) => {
-        return testDb.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId);
-    },
-    // findOrCreateUserByGoogleId needs to call the mocked getUserByGoogleId and createUser
-    findOrCreateUserByGoogleId: (googleId: string, email: string, username: string, profileImageUrl?: string) => {
-        let user = testDb.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId);
-        if (user) {
-          return user;
-        } else {
-          const createResult = testDb.prepare(
-            'INSERT INTO users (username, password, google_id, email, profile_image_url) VALUES (?, ?, ?, ?, ?)'
-          ).run(username, null, googleId, email, profileImageUrl);
-          if (createResult.lastInsertRowid) {
-            return testDb.prepare('SELECT * FROM users WHERE id = ?').get(createResult.lastInsertRowid);
-          }
-          return testDb.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId);
-        }
-    },
-    verifyPassword: originalModule.verifyPassword, // Keep original verifyPassword
-    // other exports if any...
-  };
-});
-
-
-describe('Database Functions', () => {
-  beforeAll(() => {
-    initializeTestDb(); // Initialize for the whole suite
-  });
+describe('SQLiteAdapter', () => {
+  let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    // Clear users table before each test to ensure isolation
-    testDb.exec('DELETE FROM users');
-    // Reset autoincrement sequence (optional, but good for predictability)
-    testDb.exec("DELETE FROM sqlite_sequence WHERE name='users';");
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    delete process.env.ADMIN_INITIAL_PASSWORD;
   });
 
-  afterAll(() => {
-    testDb.close();
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env.ADMIN_INITIAL_PASSWORD;
+  });
+
+  describe('초기 관리자 계정', () => {
+    test('ADMIN_INITIAL_PASSWORD가 없으면 관리자를 만들지 않는다', () => {
+      const db = createAdapter();
+
+      expect(db.getUserByUsername('admin')).toBeFalsy();
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    test('환경변수가 있으면 그 비밀번호로 관리자를 만든다', () => {
+      process.env.ADMIN_INITIAL_PASSWORD = 'a-long-enough-secret';
+      const db = createAdapter();
+
+      const admin = db.getUserByUsername('admin');
+      expect(admin).toBeTruthy();
+      expect(admin!.role).toBe('admin');
+      expect(db.verifyPassword('a-long-enough-secret', admin!.password!)).toBe(true);
+    });
+
+    test("예전 기본값인 'admin'으로는 로그인할 수 없다", () => {
+      process.env.ADMIN_INITIAL_PASSWORD = 'a-long-enough-secret';
+      const db = createAdapter();
+
+      const admin = db.getUserByUsername('admin');
+      expect(db.verifyPassword('admin', admin!.password!)).toBe(false);
+    });
   });
 
   describe('createUser', () => {
-    it('should create a user with username and password', () => {
-      const result = createUser('testuser1', 'password123');
-      expect(result.changes).toBe(1);
-      const user = getUserByUsername('testuser1') as any;
-      expect(user).toBeDefined();
-      expect(user.username).toBe('testuser1');
-      expect(user.password).not.toBe('password123'); // Should be hashed
-      expect(bcrypt.compareSync('password123', user.password)).toBe(true);
-      expect(user.google_id).toBeNull();
+    test('비밀번호를 평문으로 저장하지 않는다', () => {
+      const db = createAdapter();
+      db.createUser('alice', 'plaintext-password');
+
+      const user = db.getUserByUsername('alice');
+      expect(user!.password).not.toBe('plaintext-password');
+      expect(db.verifyPassword('plaintext-password', user!.password!)).toBe(true);
     });
 
-    it('should create a user with Google ID details (null password)', () => {
-      const result = createUser('googleuser1', null, 'google123', 'google@example.com', 'http://img.url/p.jpg');
-      expect(result.changes).toBe(1);
-      const user = getUserByGoogleId('google123') as any;
-      expect(user).toBeDefined();
-      expect(user.username).toBe('googleuser1');
-      expect(user.password).toBeNull();
-      expect(user.google_id).toBe('google123');
-      expect(user.email).toBe('google@example.com');
-      expect(user.profile_image_url).toBe('http://img.url/p.jpg');
-    });
+    test('구글 계정 사용자는 비밀번호 없이 만들어진다', () => {
+      const db = createAdapter();
+      db.createUser('bob', null, 'google-1', 'bob@example.com', 'http://example.com/b.png');
 
-    it('should fail to create a user with a duplicate username', () => {
-        createUser('duplicateuser', 'password123');
-        expect(() => {
-          createUser('duplicateuser', 'anotherpassword');
-        }).toThrow(); // SQLite TEXT UNIQUE constraint violation
+      const user = db.getUserByGoogleId('google-1');
+      expect(user).toMatchObject({
+        username: 'bob',
+        email: 'bob@example.com',
+        google_id: 'google-1',
+        role: 'user',
       });
+      expect(user!.password).toBeNull();
+    });
+
+    test('새 사용자에게 관리자 역할을 주지 않는다', () => {
+      const db = createAdapter();
+      db.createUser('carol', null, 'google-2', 'carol@example.com');
+
+      expect(db.getUserByGoogleId('google-2')!.role).toBe('user');
+    });
   });
 
   describe('getUserByGoogleId', () => {
-    it('should retrieve an existing user by Google ID', () => {
-      createUser('userWithGoogleId', null, 'googleAbc', 'guser@example.com');
-      const user = getUserByGoogleId('googleAbc') as any;
-      expect(user).toBeDefined();
-      expect(user.username).toBe('userWithGoogleId');
-      expect(user.google_id).toBe('googleAbc');
-    });
-
-    it('should return undefined for a non-existent Google ID', () => {
-      const user = getUserByGoogleId('nonexistentGoogleId');
-      expect(user).toBeUndefined();
+    test('없는 google_id면 null을 준다', () => {
+      const db = createAdapter();
+      expect(db.getUserByGoogleId('nope')).toBeFalsy();
     });
   });
 
   describe('findOrCreateUserByGoogleId', () => {
-    it('should find an existing user by Google ID', () => {
-      createUser('existingGoogleUser', null, 'googleFindMe', 'find@me.com');
-      // Ensure no new user is created by counting rows or checking lastInsertRowid if possible
-      const initialCount = testDb.prepare('SELECT COUNT(*) as count FROM users').get().count;
-      
-      const user = findOrCreateUserByGoogleId('googleFindMe', 'find@me.com', 'existingGoogleUser') as any;
-      
-      const finalCount = testDb.prepare('SELECT COUNT(*) as count FROM users').get().count;
-      expect(finalCount).toBe(initialCount); // No new user created
+    test('처음 보는 google_id면 새로 만든다', () => {
+      const db = createAdapter();
+      const user = db.findOrCreateUserByGoogleId('google-3', 'dave@example.com', 'dave');
 
-      expect(user).toBeDefined();
-      expect(user.username).toBe('existingGoogleUser');
-      expect(user.google_id).toBe('googleFindMe');
+      expect(user).toBeTruthy();
+      expect(user!.id).toBeGreaterThan(0);
+      expect(user!.google_id).toBe('google-3');
+      expect(user!.email).toBe('dave@example.com');
+      expect(user!.role).toBe('user');
     });
 
-    it('should create a new user if Google ID is not found', () => {
-      const initialCount = testDb.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    test('같은 google_id면 기존 사용자를 그대로 준다', () => {
+      const db = createAdapter();
+      const first = db.findOrCreateUserByGoogleId('google-4', 'erin@example.com', 'erin');
+      const second = db.findOrCreateUserByGoogleId('google-4', 'erin@example.com', 'erin');
 
-      const user = findOrCreateUserByGoogleId(
-        'newGoogleUser123',
-        'new.g.user@example.com',
-        'NewGoogleUser', // Ensure this username is unique for the test
-        'http://new.profile.img/url.jpg'
-      ) as any;
-
-      const finalCount = testDb.prepare('SELECT COUNT(*) as count FROM users').get().count;
-      expect(finalCount).toBe(initialCount + 1); // One new user created
-
-      expect(user).toBeDefined();
-      expect(user.google_id).toBe('newGoogleUser123');
-      expect(user.email).toBe('new.g.user@example.com');
-      expect(user.username).toBe('NewGoogleUser');
-      expect(user.profile_image_url).toBe('http://new.profile.img/url.jpg');
-      expect(user.password).toBeNull();
+      expect(second!.id).toBe(first!.id);
     });
 
-    it('should return the newly created user details correctly', () => {
-        const googleId = 'googleDetails123';
-        const email = 'details@example.com';
-        const username = 'DetailsUser';
-        const profileImageUrl = 'http://details.pic/img.png';
-  
-        const user = findOrCreateUserByGoogleId(googleId, email, username, profileImageUrl) as any;
-  
-        expect(user).toBeDefined();
-        expect(user.id).toBeGreaterThan(0); // Should have an ID from DB
-        expect(user.google_id).toBe(googleId);
-        expect(user.email).toBe(email);
-        expect(user.username).toBe(username);
-        expect(user.profile_image_url).toBe(profileImageUrl);
-        expect(user.role).toBe('user'); // Default role
-        expect(user.password).toBeNull();
-      });
+    test('기존 사용자의 역할을 요청 값으로 덮어쓰지 않는다', () => {
+      process.env.ADMIN_INITIAL_PASSWORD = 'a-long-enough-secret';
+      const db = createAdapter();
+
+      // 관리자에게 google_id를 붙여둔 상태를 만든다
+      db.createUser('frank', null, 'google-admin', 'frank@example.com');
+      const created = db.getUserByGoogleId('google-admin');
+      expect(created!.role).toBe('user');
+
+      // 같은 google_id로 다시 들어와도 역할은 DB 값이 유지돼야 한다
+      const again = db.findOrCreateUserByGoogleId('google-admin', 'someone-else@example.com', 'attacker');
+      expect(again!.role).toBe('user');
+      expect(again!.email).toBe('frank@example.com');
+    });
+  });
+
+  describe('verifyPassword', () => {
+    test('맞는 비밀번호만 통과시킨다', () => {
+      const db = createAdapter();
+      db.createUser('grace', 'correct-horse-battery');
+      const user = db.getUserByUsername('grace');
+
+      expect(db.verifyPassword('correct-horse-battery', user!.password!)).toBe(true);
+      expect(db.verifyPassword('wrong', user!.password!)).toBe(false);
+    });
+  });
+
+  describe('레이아웃', () => {
+    test('저장한 레이아웃을 목록에서 찾을 수 있다', () => {
+      const db = createAdapter();
+      db.createUser('heidi', null, 'google-5', 'heidi@example.com');
+      const author = db.getUserByGoogleId('google-5')!;
+
+      const before = db.getLayouts().length;
+      db.saveLayout('내 레이아웃', JSON.stringify({ photoCount: 2 }), author.id);
+      const layouts = db.getLayouts();
+
+      expect(layouts.length).toBe(before + 1);
+      expect(layouts.some((layout) => layout.name === '내 레이아웃')).toBe(true);
+    });
+
+    test('삭제하면 목록에서 사라진다', () => {
+      const db = createAdapter();
+      db.createUser('ivan', null, 'google-6', 'ivan@example.com');
+      const author = db.getUserByGoogleId('google-6')!;
+
+      db.saveLayout('지울 레이아웃', JSON.stringify({ photoCount: 1 }), author.id);
+      const target = db.getLayouts().find((layout) => layout.name === '지울 레이아웃')!;
+
+      db.deleteLayout(target.id);
+
+      expect(db.getLayouts().some((layout) => layout.id === target.id)).toBe(false);
+    });
   });
 });

@@ -8,8 +8,7 @@ import { defaultTemplates, serializeTemplate } from './default-templates';
 export class SQLiteAdapter implements DatabaseAdapter {
   private db: Database.Database;
 
-  constructor() {
-    const dbPath = path.join(process.cwd(), 'data', 'app.db');
+  constructor(dbPath: string = path.join(process.cwd(), 'data', 'app.db')) {
     this.db = new Database(dbPath);
     this.initializeTables();
     this.initializeAdmin();
@@ -45,11 +44,23 @@ export class SQLiteAdapter implements DatabaseAdapter {
 
   private initializeAdmin() {
     const existingAdmin = this.db.prepare('SELECT * FROM users WHERE username = ?').get('admin');
-    
-    if (!existingAdmin) {
-      const hashedPassword = bcrypt.hashSync('admin', 10);
-      this.db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run('admin', hashedPassword, 'admin');
+    if (existingAdmin) return;
+
+    // 초기 비밀번호를 환경변수로만 받는다. 예전처럼 'admin'을 기본값으로 심으면
+    // 배포된 인스턴스마다 admin/admin으로 관리자 로그인이 뚫린다.
+    const initialPassword = process.env.ADMIN_INITIAL_PASSWORD;
+    if (!initialPassword) {
+      console.warn(
+        'ADMIN_INITIAL_PASSWORD가 없어 관리자 계정을 만들지 않았습니다. ' +
+          '관리자가 필요하면 환경변수를 설정하거나 scripts/set-admin-password.js를 쓰세요.',
+      );
+      return;
     }
+
+    const hashedPassword = bcrypt.hashSync(initialPassword, 10);
+    this.db
+      .prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)')
+      .run('admin', hashedPassword, 'admin');
   }
 
   private initializeTemplates() {

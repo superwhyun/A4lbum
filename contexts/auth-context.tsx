@@ -111,32 +111,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        // Get user info from Google API using access_token
-        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!userInfoResponse.ok) {
-          console.error('Failed to get user info from Google');
-          googleLoginPromiseCallbacks?.resolve(false);
-          setGoogleLoginPromiseCallbacks(null);
-          return;
-        }
-
-        const googleUser = await userInfoResponse.json();
-        
-        // Send user info to our backend
+        // 액세스 토큰만 넘기고 신원 확인은 서버가 구글에 직접 물어본다.
+        // 클라이언트가 googleId/email을 주장하면 누구나 남의 계정으로 로그인할 수 있다.
         const response = await fetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            googleId: googleUser.id,
-            email: googleUser.email,
-            name: googleUser.name,
-            picture: googleUser.picture
-          }),
+          body: JSON.stringify({ accessToken }),
         });
 
         if (response.ok) {

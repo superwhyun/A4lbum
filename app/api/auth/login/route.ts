@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { getUserByUsername, verifyPassword } from '@/lib/database';
+import { signToken } from '@/lib/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,11 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '잘못된 사용자명 또는 비밀번호입니다.' }, { status: 401 });
     }
 
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = signToken({ userId: user.id, username: user.username, role: user.role });
 
     const response = NextResponse.json({
       message: '로그인 성공',
