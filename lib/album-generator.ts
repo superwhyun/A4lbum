@@ -8,8 +8,8 @@ export interface PhotoSpec {
   width: number
   height: number
   date?: string
-  /** 피사체(얼굴 등) 중심 좌표. 원본 이미지 크기 대비 0-100% */
-  subject?: { x: number; y: number }
+  /** 피사체(얼굴 등) 중심 좌표. 원본 이미지 크기 대비 0-100%. w/h는 경계상자 크기(%)로 사진 배치 비율 매칭에 쓴다. */
+  subject?: { x: number; y: number; w?: number; h?: number }
 }
 
 export type Rng = () => number
@@ -119,12 +119,20 @@ export function pickTemplate(
   return matching[Math.floor(rng() * matching.length)]
 }
 
+/** 사진의 레이아웃 매칭에 쓸 비율. 피사체 경계상자(w/h)가 있으면 그것을, 없으면 사진 전체 비율을 쓴다. */
+function photoMatchRatio(photo: PhotoSpec): number {
+  if (photo.subject?.w && photo.subject?.h) {
+    return (photo.subject.w / photo.subject.h) * (photo.width / photo.height)
+  }
+  return photo.width / photo.height
+}
+
 /** 사진 종횡비와 슬롯 종횡비를 정렬 매칭해 배정 */
 export function assignPhotosToTemplate(
   template: LayoutTemplate,
   pagePhotos: readonly PhotoSpec[],
 ): PhotoLayout[] {
-  const sortedPhotos = [...pagePhotos].sort((a, b) => a.width / a.height - b.width / b.height)
+  const sortedPhotos = [...pagePhotos].sort((a, b) => photoMatchRatio(a) - photoMatchRatio(b))
   const slotsWithIndex = template.layouts.map((layout, index) => ({ ...layout, originalIndex: index }))
   slotsWithIndex.sort((a, b) => a.width / a.height - b.width / b.height)
 

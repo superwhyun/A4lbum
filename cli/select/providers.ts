@@ -74,9 +74,15 @@ const DEFAULT_PROMPT = [
   "You are curating photos for a printed A4 photo album.",
   "Judge whether this photo is good enough to print.",
   "Reject blurry, badly exposed, duplicated-looking, or uninteresting shots.",
-  "Also locate the main subject (face or focal point).",
-  'Answer with JSON only: {"keep": boolean, "score": 0..1, "subject": {"x": 0..100, "y": 0..100}, "reason": "short"}',
-  "subject.x/y are percentages of image width/height.",
+  "Locate the MAIN subject region and give its bounding box as percentages of image width/height.",
+  "For one person/animals: the subject is the face/head.",
+  "For multiple people (a group): the box CONTAINS ALL visible faces so nobody is cut off.",
+  'Answer with JSON only: {"keep": boolean, "score": 0..1, "subject": {"x": 0..100, "y": 0..100, "w": 1..100, "h": 1..100}, "reason": "short"}',
+  "subject.x/y = center of the subject box, subject.w/h = width/height of the subject box, as % of the image.",
+  "Make the box big enough to hold every person's full face/head (for a group, the whole group).",
+  "Be precise: report where the subject actually is, NOT near the center by default.",
+  "If the subject touches an image edge, shrink the box inward so all people stay inside it.",
+  "Always give the box even if unsure; never output null/empty subject.",
 ].join(" ")
 
 /** OpenAI 호환 비전 엔드포인트(ollama, LM Studio, 자체 서버 등)로 판정 */
@@ -191,10 +197,16 @@ function normalizeJudgement(raw: Record<string, unknown> | Judgement, source: st
   const id = typeof value.id === "string" ? value.id : ""
   if (!id) throw new Error("판정 항목에 id가 없습니다")
 
-  const rawSubject = value.subject as { x?: unknown; y?: unknown } | undefined
+  const rawSubject = value.subject as { x?: unknown; y?: unknown; w?: unknown; h?: unknown } | undefined
   const subject =
     rawSubject && typeof rawSubject.x === "number" && typeof rawSubject.y === "number"
-      ? { x: clampPercent(rawSubject.x), y: clampPercent(rawSubject.y) }
+      ? {
+          x: clampPercent(rawSubject.x),
+          y: clampPercent(rawSubject.y),
+          // 경계상자 크기(w/h)는 사진 배치 시 피사체 비율로 쓰인다. 없으면 사진 전체 비율 사용.
+          ...(typeof rawSubject.w === "number" ? { w: clampPercent(rawSubject.w) } : {}),
+          ...(typeof rawSubject.h === "number" ? { h: clampPercent(rawSubject.h) } : {}),
+        }
       : undefined
 
   return {

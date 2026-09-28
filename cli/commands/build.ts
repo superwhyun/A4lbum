@@ -18,6 +18,8 @@ export interface BuildOptions {
   outDir: string
   provider: VisionProvider
   theme: string
+  /** 표지(첫 페이지) 타이틀. 미지정 시 대표 사진 촬영일 사용 */
+  title?: string
   orientation: "portrait" | "landscape"
   density: AlbumDensity
   variants: number
@@ -75,6 +77,13 @@ export async function buildAlbums(options: BuildOptions): Promise<BuildResult> {
   })
 
   const winner = variants[0]
+  // --title 지정 시 모든 후보의 표지(첫 페이지) 타이틀을 교체한다 (CLI 전용 — 웹 공유 코드 건드리지 않음)
+  if (options.title) {
+    for (const variant of variants) {
+      const cover = variant.album.pages[0]
+      if (cover) cover.title = options.title
+    }
+  }
   log(
     `후보 ${variants.length}개 생성 — 최고 점수 ${winner.score.total.toFixed(3)} ` +
       `(seed=${winner.seed}, ${winner.album.pages.length}페이지)`,
@@ -82,7 +91,9 @@ export async function buildAlbums(options: BuildOptions): Promise<BuildResult> {
 
   await mkdir(options.outDir, { recursive: true })
 
-  const renderer = await createRenderer(kept.map(({ photo }) => ({ id: photo.id, path: photo.path })))
+  const renderer = await createRenderer(
+    kept.map(({ photo }) => ({ id: photo.id, path: photo.path })),
+  )
   const renderPhotos = toRenderPhotos(kept, renderer.photoUrl)
 
   const variantPaths: string[] = []

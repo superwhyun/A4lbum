@@ -56,8 +56,8 @@ export interface Judgement {
   keep: boolean
   /** 0-1. 후보 앨범 점수 계산에도 쓰인다 */
   score: number
-  /** 주요 피사체 중심 좌표 (이미지 크기 대비 0-100%) */
-  subject?: { x: number; y: number }
+  /** 주요 피사체 중심 좌표 (이미지 크기 대비 0-100%). w/h는 피사체 경계상자 크기로 사진 배치 시 비율 매칭에 쓰인다. */
+  subject?: { x: number; y: number; w?: number; h?: number }
   reason?: string
   /** 판정 주체 (heuristic / file:<경로> / http:<모델> …) */
   source?: string

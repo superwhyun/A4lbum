@@ -16,6 +16,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
 const DEFAULTS = {
   theme: "classic",
+  title: "" as string,
   orientation: "portrait" as const,
   density: "medium" as AlbumDensity,
   variants: 5,
@@ -140,6 +141,7 @@ async function runScan(dir: string, flags: ScanFlags): Promise<ScanManifest> {
 
 interface BuildFlags extends SelectionFlags {
   out: string
+  title: string
   theme: string
   orientation: "portrait" | "landscape"
   density: AlbumDensity
@@ -159,6 +161,7 @@ async function runBuild(manifest: ScanManifest, flags: BuildFlags): Promise<void
     outDir: resolve(flags.out),
     provider,
     theme: flags.theme,
+    title: flags.title,
     orientation: flags.orientation,
     density: flags.density,
     variants: flags.variants,
@@ -187,6 +190,7 @@ function addSelectionOptions(command: Command): Command {
 function addBuildOptions(command: Command): Command {
   return addSelectionOptions(command)
     .option("-o, --out <dir>", "결과 폴더", DEFAULTS.outDir)
+    .option("--title <text>", "표지(첫 페이지) 타이틀. 지정하지 않으면 대표 사진 촬영일을 사용")
     .option("--theme <theme>", `앨범 테마 (${THEMES.join(", ")})`, parseChoice(THEMES, "테마"), DEFAULTS.theme)
     .option(
       "--orientation <orientation>",
