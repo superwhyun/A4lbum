@@ -1,29 +1,12 @@
 // lib/database.ts
 import { DatabaseAdapter } from './database-types';
 import { SQLiteAdapter } from './database-sqlite';
-import { PostgresAdapter } from './database-postgres';
+// PostgresAdapter(lib/database-postgres.ts)는 참고용으로 파일만 남겨두고 더 이상 사용하지 않는다.
 
-// 환경별 데이터베이스 어댑터 선택
+// 모든 환경(로컬, Vercel 배포 포함)에서 SQLite로 고정한다.
+// DATABASE_URL(Neon Postgres 등)이 주입돼 있어도 무시한다.
+// DB 파일 경로는 SQLiteAdapter가 환경에 맞게 결정한다(Vercel: /tmp, 그 외: data/app.db).
 const createDatabaseAdapter = (): DatabaseAdapter => {
-  // Vercel 환경 감지 방법들
-  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
-  const hasPostgresUrl = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('postgres');
-  
-  console.log('Environment check:', {
-    NODE_ENV: process.env.NODE_ENV,
-    VERCEL: process.env.VERCEL,
-    VERCEL_ENV: process.env.VERCEL_ENV,
-    hasPostgresUrl: !!hasPostgresUrl
-  });
-  
-  // Postgres 환경변수가 있으면 Postgres 사용 (Vercel/배포 환경)
-  if (hasPostgresUrl) {
-    console.log('Using PostgreSQL database (Neon) for production');
-    return new PostgresAdapter();
-  }
-  
-  // 그 외에는 SQLite 사용 (로컬 개발환경)
-  console.log('Using SQLite database for local development');
   return new SQLiteAdapter();
 };
 

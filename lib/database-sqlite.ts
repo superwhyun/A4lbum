@@ -1,14 +1,25 @@
 // lib/database-sqlite.ts
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
 import path from 'path';
 import { DatabaseAdapter, User, Layout } from './database-types';
 import { defaultTemplates, serializeTemplate } from './default-templates';
 
+// Vercel serverless는 /tmp 외에는 read-only라 그곳에 DB를 둔다(인스턴스별 임시 저장소라 영속되지 않음).
+// 그 외 환경은 기존대로 프로젝트의 data/app.db를 쓴다.
+const defaultDbPath = (): string =>
+  process.env.VERCEL
+    ? path.join('/tmp', 'a4lbum', 'app.db')
+    : path.join(process.cwd(), 'data', 'app.db');
+
 export class SQLiteAdapter implements DatabaseAdapter {
   private db: Database.Database;
 
-  constructor(dbPath: string = path.join(process.cwd(), 'data', 'app.db')) {
+  constructor(dbPath: string = defaultDbPath()) {
+    if (dbPath !== ':memory:') {
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    }
     this.db = new Database(dbPath);
     this.initializeTables();
     this.initializeAdmin();
