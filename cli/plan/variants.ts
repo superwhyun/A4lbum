@@ -30,6 +30,8 @@ export interface PlanOptions {
   padding?: SubjectPadding
   /** 페이지 여백 (mm) */
   margin?: number
+  /** 페이지당 최소 사진 개수 (기본 1) */
+  minPerPage?: number
   coverPhotoId?: string
   captions?: boolean
 }
@@ -101,6 +103,7 @@ export function planVariants(options: PlanOptions): Variant[] {
       placement: options.placement,
       layoutSource: options.layoutSource ?? "both",
       grouping: options.grouping ?? {},
+      minPerPage: options.minPerPage,
       padding: options.padding,
       margins: options.margin !== undefined ? { margin: options.margin } : undefined,
       coverPhotoId: options.coverPhotoId,

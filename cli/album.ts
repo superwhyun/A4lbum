@@ -31,6 +31,7 @@ const DEFAULTS = {
   layout: "both" as LayoutSource,
   subjectPadding: 0.1,
   margin: 8,
+  minPerPage: 1,
 } as const
 
 const DENSITIES: readonly AlbumDensity[] = ["sparse", "medium", "dense"]
@@ -174,6 +175,7 @@ interface BuildFlags extends SelectionFlags {
   subjectPadding: number
   cover?: string
   margin: number
+  minPerPage: number
   captions: boolean
 }
 
@@ -202,6 +204,7 @@ async function runBuild(manifest: ScanManifest, flags: BuildFlags): Promise<void
     subjectPadding: flags.subjectPadding,
     coverFileName: flags.cover,
     margin: flags.margin,
+    minPerPage: flags.minPerPage,
     captions: flags.captions,
     onLog: (message) => console.log(`[build] ${message}`),
   })
@@ -249,6 +252,7 @@ function addBuildOptions(command: Command): Command {
     .option("--subject-padding <ratio>", "피사체 상자 여백 비율 (위쪽은 2배)", parseRatio, DEFAULTS.subjectPadding)
     .option("--cover <fileName>", "표지로 쓸 사진 파일 이름 (기본은 자동 선택)")
     .option("--margin <mm>", "페이지 여백 (mm)", parseNonNegativeNumber, DEFAULTS.margin)
+    .option("--min-per-page <n>", "페이지당 최소 사진 개수 (기본 1)", parsePositiveNumber, DEFAULTS.minPerPage)
     .option("--captions", "그룹 첫 페이지에 날짜 · 장소 캡션", false)
 }
 

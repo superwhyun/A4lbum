@@ -39,6 +39,8 @@ export interface BuildAlbumInput {
   layoutSource?: LayoutSource
   /** false면 그룹 없이 시간순으로만 나눈다 */
   grouping?: GroupingOptions | false
+  /** 페이지당 최소 사진 개수 (기본 1) */
+  minPerPage?: number
 }
 
 export interface PlanAlbumInput extends BuildAlbumInput {
@@ -301,6 +303,7 @@ export function planAlbum(input: PlanAlbumInput): PlanAlbumResult {
     idSeed = String(Date.now()),
     layoutSource = "both",
     grouping = {},
+    minPerPage,
     padding,
     defaultSubjectBox,
     margins,
@@ -369,6 +372,7 @@ export function planAlbum(input: PlanAlbumInput): PlanAlbumResult {
     box,
     orientation,
     density,
+    minPerPage,
     layoutSource,
     templates,
     weights: paginationWeights,

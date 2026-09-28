@@ -29,6 +29,8 @@ export const DENSITY_TARGETS: Record<AlbumDensity, { target: number; max: number
 export interface PaginateOptions extends LayoutPageOptions {
   box: PageBox
   density?: AlbumDensity
+  /** 페이지당 최소 사진 개수 (기본 1). 마지막 페이지는 이보다 적어도 허용된다. */
+  minPerPage?: number
   weights?: Partial<PaginationWeights>
   /** 있으면 변형(variant) 모드: 페이지마다 상위 후보 중 softmax로 고르고 목표 밀도를 흔든다 */
   rng?: Rng
@@ -120,12 +122,16 @@ export function paginate(photos: readonly PhotoSpec[], boundaries: readonly Boun
   const from = new Array<number>(n + 1).fill(-1)
   best[0] = 0
 
+  const minPerPage = Math.max(1, options.minPerPage ?? 1)
+
   for (let j = 1; j <= n; j++) {
     for (let i = Math.max(0, j - maxPerPage); i < j; i++) {
       if (!Number.isFinite(best[i])) continue
+      const count = j - i
+      // 최소 사진 수 제약: 마지막 페이지(j===n)는 count < minPerPage여도 허용
+      if (count < minPerPage && j !== n) continue
       const page = segmentPage(i, j)
       if (!page) continue
-      const count = j - i
       const cost =
         page.cost + weights.page + (weights.density * Math.abs(count - target)) / target + insidePenalty(i, j)
       if (best[i] + cost < best[j]) {

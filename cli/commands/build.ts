@@ -43,6 +43,8 @@ export interface BuildOptions {
   coverFileName?: string
   /** 페이지 여백 (mm) */
   margin?: number
+  /** 페이지당 최소 사진 개수 (기본 1) */
+  minPerPage?: number
   /** 그룹 첫 페이지에 "날짜 · 장소" 캡션 */
   captions?: boolean
   onLog?: (message: string) => void
@@ -108,6 +110,7 @@ export async function buildAlbums(options: BuildOptions): Promise<BuildResult> {
     grouping: options.grouping,
     padding: options.subjectPadding !== undefined ? paddingFromRatio(options.subjectPadding) : undefined,
     margin: options.margin,
+    minPerPage: options.minPerPage,
     coverPhotoId,
     captions: options.captions,
   })
@@ -194,6 +197,7 @@ export async function buildAlbums(options: BuildOptions): Promise<BuildResult> {
           grouping: options.grouping ?? {},
           subjectPadding: options.subjectPadding,
           margin: options.margin,
+          minPerPage: options.minPerPage,
           cover: options.coverFileName,
           captions: options.captions ?? false,
         },
