@@ -60,6 +60,16 @@ describe("fileProvider", () => {
     expect(judgement.subject).toEqual({ x: 0, y: 100 })
   })
 
+  test("trims a subject box that runs past the image into valid edges", async () => {
+    const filePath = await writeJudgements({
+      judgements: [{ id: "a", keep: true, score: 0.8, subject: { x: 95, y: 10, w: 30, h: 40 } }],
+    })
+
+    const [judgement] = await fileProvider(filePath).judge([photo("a", 0.5)])
+    // x: 80..110 → 80..100, y: -10..30 → 0..30
+    expect(judgement.subject).toEqual({ x: 90, w: 20, y: 15, h: 30 })
+  })
+
   test("defaults keep to true when the field is absent", async () => {
     const filePath = await writeJudgements({ judgements: [{ id: "a", score: 0.6 }] })
     const [judgement] = await fileProvider(filePath).judge([photo("a", 0.5)])

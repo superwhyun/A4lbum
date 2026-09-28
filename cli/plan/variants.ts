@@ -1,9 +1,16 @@
-// 같은 사진 묶음으로 서로 다른 랜덤 레이아웃의 후보 앨범을 여러 개 만든다
-import { buildAlbum, createRng, type PhotoSpec } from "@/lib/album-generator"
+// 같은 사진 묶음으로 후보 앨범을 여러 개 만든다.
+// 0번은 최적해(결정론적), 나머지는 페이지마다 상위 후보 중 softmax로 고르고 목표 밀도를 흔든 변형이다.
+import { createRng, planAlbum, type LayoutSource, type PhotoSpec } from "@/lib/album-generator"
+import type { SubjectPadding } from "@/lib/layout/geometry"
+import type { GroupingOptions } from "@/lib/layout/grouping"
+import type { SolvedPage } from "@/lib/layout/page-cost"
 import { scoreAlbum, type ScoringPhoto } from "@/cli/plan/score"
 import type { SelectedPhoto } from "@/cli/select/screen"
 import type { Variant } from "@/cli/types"
 import type { AlbumDensity, LayoutTemplate, Photo } from "@/types/album"
+
+/** 변형 후보의 목표 밀도 흔들기 폭 (±장) */
+const VARIANT_DENSITY_JITTER = 1
 
 export interface PlanOptions {
   photos: readonly SelectedPhoto[]
@@ -15,20 +22,40 @@ export interface PlanOptions {
   count: number
   /** 기준 시드 — 같은 시드면 같은 후보들이 재현된다 */
   seed: number
-  focusOnSubject: boolean
+  /** subject: 피사체 상자 기준 배치, center: 가운데 고정 */
+  placement: "subject" | "center"
+  layoutSource?: LayoutSource
+  /** false면 그룹 없이 시간순으로만 */
+  grouping?: GroupingOptions | false
+  padding?: SubjectPadding
+  /** 페이지 여백 (mm) */
+  margin?: number
+  coverPhotoId?: string
+  captions?: boolean
 }
 
 export function toPhotoSpecs(photos: readonly SelectedPhoto[]): PhotoSpec[] {
-  return photos.map(({ photo, judgement }) => ({
-    id: photo.id,
-    width: photo.width,
-    height: photo.height,
-    date: photo.date,
-    subject: judgement.subject,
-  }))
+  return photos.map(({ photo, judgement }) => {
+    const takenAt = photo.takenAt ? Date.parse(photo.takenAt) : Number.NaN
+    return {
+      id: photo.id,
+      width: photo.width,
+      height: photo.height,
+      date: photo.date,
+      takenAt: Number.isFinite(takenAt) ? takenAt : undefined,
+      timeSource: photo.timeSource ?? "unknown",
+      gps: photo.gps,
+      location: photo.location,
+      subject: judgement.subject,
+      score: judgement.score,
+    }
+  })
 }
 
-export function toScoringPhotos(photos: readonly SelectedPhoto[]): ScoringPhoto[] {
+export function toScoringPhotos(
+  photos: readonly SelectedPhoto[],
+  groupOf: ReadonlyMap<string, string> = new Map(),
+): ScoringPhoto[] {
   return photos.map(({ photo, judgement }) => ({
     id: photo.id,
     width: photo.width,
@@ -36,6 +63,7 @@ export function toScoringPhotos(photos: readonly SelectedPhoto[]): ScoringPhoto[
     score: judgement.score,
     subject: judgement.subject,
     takenAt: photo.takenAt,
+    groupId: groupOf.get(photo.id),
   }))
 }
 
@@ -54,26 +82,47 @@ export function toRenderPhotos(photos: readonly SelectedPhoto[], urlForPhoto: (i
 
 /** 후보 앨범들을 만들어 점수순(높은 순)으로 돌려준다 */
 export function planVariants(options: PlanOptions): Variant[] {
-  const { photos, templates, theme, orientation, density, count, seed, focusOnSubject } = options
-
+  const { photos, templates, theme, orientation, density, count, seed } = options
   const specs = toPhotoSpecs(photos)
-  const scoringPhotos = toScoringPhotos(photos)
+  // 모든 후보가 같은 사진·옵션을 쓰므로 구간별 레이아웃 풀이를 공유한다
+  const layoutCache = new Map<string, SolvedPage[]>()
 
   const variants: Variant[] = []
   for (let index = 0; index < count; index++) {
     const variantSeed = seed + index
-    const album = buildAlbum({
+    const optimal = index === 0
+
+    const result = planAlbum({
       photos: specs,
       templates,
       theme,
       orientation,
       density,
-      focusOnSubject,
-      rng: createRng(variantSeed),
+      placement: options.placement,
+      layoutSource: options.layoutSource ?? "both",
+      grouping: options.grouping ?? {},
+      padding: options.padding,
+      margins: options.margin !== undefined ? { margin: options.margin } : undefined,
+      coverPhotoId: options.coverPhotoId,
+      captions: options.captions,
+      rng: optimal ? undefined : createRng(variantSeed),
+      densityJitter: optimal ? 0 : VARIANT_DENSITY_JITTER,
       idSeed: `v${index}`,
+      layoutCache,
     })
 
-    variants.push({ index, seed: variantSeed, album, score: scoreAlbum(album, scoringPhotos) })
+    const groupOf = new Map<string, string>()
+    for (const group of result.groups) for (const id of group.photoIds) groupOf.set(id, group.id)
+
+    variants.push({
+      index,
+      seed: variantSeed,
+      album: result.album,
+      score: scoreAlbum(result.album, toScoringPhotos(photos, groupOf), { marginMm: options.margin }),
+      groups: result.groups,
+      groupingMode: result.groupingMode,
+      diagnostics: result.diagnostics,
+    })
   }
 
   return variants.sort((a, b) => b.score.total - a.score.total)

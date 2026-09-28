@@ -8,6 +8,13 @@ import { extractPhotoDate, extractPhotoLocation } from "@/utils/photo-metadata"
 import { detectFaceCenter } from "@/utils/face-detection"
 import { buildAlbum, type PhotoSpec } from "@/lib/album-generator"
 
+/** "YYYY.MM.DD" → 그날 정오 (epoch ms). 형식이 아니면 undefined */
+function dayToEpoch(date?: string): number | undefined {
+  const match = date ? /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(date) : null
+  if (!match) return undefined
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12).getTime()
+}
+
 interface AlbumContextType {
   photos: Photo[]
   album: Album | null
@@ -264,32 +271,44 @@ export function AlbumProvider({ children }: { children: ReactNode }) {
   const createAlbum = async (theme: string, orientation: "portrait" | "landscape", density: AlbumDensity = "medium", autoFaceCenter: boolean = false) => {
     if (photos.length === 0) return
 
-    // 얼굴 중심 배치를 켠 경우에만 사진별 피사체 좌표를 미리 계산
+    // 웹은 날짜(일 단위)와 주소만 있으므로 "같은 날 + 같은 장소" 정도로 묶인다
+    const toSpec = (photo: Photo): PhotoSpec => ({
+      id: photo.id,
+      width: photo.width,
+      height: photo.height,
+      date: photo.date,
+      takenAt: dayToEpoch(photo.date),
+      location: photo.location,
+    })
+
+    // 얼굴 중심 배치를 켠 경우에만 사진별 피사체 좌표를 미리 계산 (중심만 있으므로 그 점을 포함한 기본 안전 영역을 지킨다)
     const specs: PhotoSpec[] = autoFaceCenter
       ? await Promise.all(
           photos.map(async (photo) => ({
-            id: photo.id,
-            width: photo.width,
-            height: photo.height,
-            date: photo.date,
+            ...toSpec(photo),
             subject: (await detectFaceCenter(photo.url)) ?? undefined,
           })),
         )
-      : photos.map((photo) => ({
-          id: photo.id,
-          width: photo.width,
-          height: photo.height,
-          date: photo.date,
-        }))
+      : photos.map(toSpec)
+
+    // 날짜가 있는 사진은 시간순으로 (날짜 없는 사진은 원래 순서대로 뒤에)
+    const ordered = specs
+      .map((spec, index) => ({ spec, index }))
+      .sort((a, b) => (a.spec.takenAt ?? Infinity) - (b.spec.takenAt ?? Infinity) || a.index - b.index)
+      .map(({ spec }) => spec)
 
     setAlbum(
       buildAlbum({
-        photos: specs,
+        photos: ordered,
         templates,
         theme,
         orientation,
         density,
         focusOnSubject: autoFaceCenter,
+        // 웹은 기존 템플릿 모양을 유지한다 (맞는 템플릿이 없을 때만 사진에 맞춘 행 배치)
+        layoutSource: "templates",
+        // 날짜가 일 단위라 같은 날 사진 간격은 0 → 주소가 바뀌면 간격과 무관하게 약한 경계로 본다
+        grouping: { locationGapMinutes: -1 },
       }),
     )
   }

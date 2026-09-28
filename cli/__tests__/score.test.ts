@@ -62,7 +62,7 @@ describe("scoreAlbum", () => {
     expect(scoreAlbum(album([layoutsFor(["c", "a", "b"])]), photos).chronology).toBeLessThan(1)
   })
 
-  test("rewards an even number of photos per page", () => {
+  test("rewards an even area per photo across pages", () => {
     const photos: ScoringPhoto[] = Array.from({ length: 6 }, (_, i) => ({
       id: `p${i}`,
       width: 1000,
@@ -70,6 +70,7 @@ describe("scoreAlbum", () => {
       score: 0.8,
     }))
     const slot = (photoId: string, i: number) => ({ id: `l${i}`, x: 0, y: i * 30, width: 100, height: 29, photoId })
+    const fullPage = (photoId: string) => ({ id: "full", x: 0, y: 0, width: 100, height: 100, photoId })
 
     const even = album([
       { id: "a", layouts: [slot("p0", 0), slot("p1", 1), slot("p2", 2)] },
@@ -77,12 +78,65 @@ describe("scoreAlbum", () => {
     ])
     const lopsided = album([
       { id: "a", layouts: [slot("p0", 0), slot("p1", 1), slot("p2", 2)] },
-      { id: "b", layouts: [slot("p3", 0)] },
-      { id: "c", layouts: [slot("p4", 0)] },
-      { id: "d", layouts: [slot("p5", 0)] },
+      { id: "b", layouts: [fullPage("p3")] },
+      { id: "c", layouts: [fullPage("p4")] },
+      { id: "d", layouts: [fullPage("p5")] },
     ])
 
     expect(scoreAlbum(even, photos).balance).toBeGreaterThan(scoreAlbum(lopsided, photos).balance)
+  })
+
+  test("sees a group photo cut in half even when its center stays in frame", () => {
+    // 4:3 단체 사진, 피사체가 가로 전체. 세로로 긴 셀(0.707)에 넣으면 중심은 보이지만 절반이 잘린다
+    const group: ScoringPhoto = { id: "g", width: 4000, height: 3000, score: 0.8, subject: { x: 50, y: 50, w: 100, h: 40 } }
+    const cut = album([
+      { id: "p", layouts: [{ id: "l", x: 0, y: 0, width: 50, height: 50, photoId: "g", photoX: 50, photoY: 50 }] },
+    ])
+    const whole = album([
+      { id: "p", layouts: [{ id: "l", x: 0, y: 0, width: 100, height: 52.9, photoId: "g", photoX: 50, photoY: 50 }] },
+    ])
+
+    expect(scoreAlbum(cut, [group]).subjectSafety).toBeLessThan(0.6)
+    expect(scoreAlbum(whole, [group]).subjectSafety).toBeCloseTo(1)
+  })
+
+  test("counts a contain frame as never cutting the subject", () => {
+    const group: ScoringPhoto = { id: "g", width: 4000, height: 3000, score: 0.8, subject: { x: 50, y: 50, w: 100, h: 40 } }
+    const contained = album([
+      { id: "p", layouts: [{ id: "l", x: 0, y: 0, width: 50, height: 50, photoId: "g", fit: "contain" }] },
+    ])
+    expect(scoreAlbum(contained, [group]).subjectSafety).toBe(1)
+  })
+
+  test("rewards pages that keep one group together", () => {
+    const photos: ScoringPhoto[] = ["a1", "a2", "b1", "b2"].map((id) => ({
+      id,
+      width: 1000,
+      height: 1000,
+      score: 0.8,
+      groupId: id[0],
+    }))
+    const slot = (photoId: string, i: number) => ({ id: `l${i}`, x: 0, y: i * 50, width: 100, height: 49, photoId })
+
+    const cohesive = album([
+      { id: "p1", layouts: [slot("a1", 0), slot("a2", 1)] },
+      { id: "p2", layouts: [slot("b1", 0), slot("b2", 1)] },
+    ])
+    const mixed = album([
+      { id: "p1", layouts: [slot("a1", 0), slot("b1", 1)] },
+      { id: "p2", layouts: [slot("a2", 0), slot("b2", 1)] },
+    ])
+
+    expect(scoreAlbum(cohesive, photos).groupCohesion).toBe(1)
+    expect(scoreAlbum(mixed, photos).groupCohesion).toBeLessThan(0.5)
+  })
+
+  test("prefers split groups on consecutive pages", () => {
+    const photos: ScoringPhoto[] = ["a1", "a2", "b1"].map((id) => ({ id, width: 1, height: 1, score: 1, groupId: id[0] }))
+    const one = (photoId: string) => ({ id: photoId, layouts: [{ id: "l", x: 0, y: 0, width: 100, height: 100, photoId }] })
+
+    expect(scoreAlbum(album([one("a1"), one("a2"), one("b1")]), photos).groupSplitOrder).toBe(1)
+    expect(scoreAlbum(album([one("a1"), one("b1"), one("a2")]), photos).groupSplitOrder).toBe(0)
   })
 
   test("ignores layouts whose photo is missing", () => {

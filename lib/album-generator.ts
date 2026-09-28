@@ -1,18 +1,27 @@
 // 앨범 페이지 구성 로직 (브라우저 API 비의존 — 웹과 CLI가 공유)
+// 흐름: 표지 선택 → 시간/장소 그룹 → 타임라인 DP 페이지 나누기 → 페이지별 셀 풀이 → 피사체 기준 배치
 import type { Album, AlbumDensity, AlbumPage, LayoutTemplate, PhotoLayout } from "@/types/album"
-import { A4_SIZE } from "@/types/album"
+import {
+  feasibleRange,
+  imageRatio,
+  isRatioFeasible,
+  pageSizeMm,
+  placePhoto,
+  visibleRatio,
+  type GeometryOptions,
+  type Placement,
+  type SubjectPadding,
+} from "@/lib/layout/geometry"
+import { groupPhotos, type Boundary, type GroupingOptions, type PhotoGroup } from "@/lib/layout/grouping"
+import { cellsToLayouts, type SolvedPage } from "@/lib/layout/page-cost"
+import { contentBox, DEFAULT_GUTTER_MM, DEFAULT_MARGIN_MM, type LayoutSource } from "@/lib/layout/page-layout"
+import { paginate, type PaginationWeights } from "@/lib/layout/paginate"
+import { fitTemplate } from "@/lib/layout/template-fit"
+import type { PageSize, PhotoSpec, Rng } from "@/lib/layout/types"
 
-/** 레이아웃 계산에 필요한 사진 정보의 최소 형태 */
-export interface PhotoSpec {
-  id: string
-  width: number
-  height: number
-  date?: string
-  /** 피사체(얼굴 등) 중심 좌표. 원본 이미지 크기 대비 0-100%. w/h는 경계상자 크기(%)로 사진 배치 비율 매칭에 쓴다. */
-  subject?: { x: number; y: number; w?: number; h?: number }
-}
-
-export type Rng = () => number
+export type { PhotoSpec, Rng, SubjectBox, TimeSource } from "@/lib/layout/types"
+export type { LayoutSource } from "@/lib/layout/page-layout"
+export { pageSizeMm, visibleRatio } from "@/lib/layout/geometry"
 
 export interface BuildAlbumInput {
   photos: readonly PhotoSpec[]
@@ -20,29 +29,76 @@ export interface BuildAlbumInput {
   theme: string
   orientation: "portrait" | "landscape"
   density?: AlbumDensity
-  /** 피사체 중심으로 프레임 내 사진 위치를 보정할지 여부 */
+  /** @deprecated placement를 쓴다. false면 placement "center" */
   focusOnSubject?: boolean
+  /** 있으면 변형 모드 (페이지 구조를 상위 후보 중 무작위로). 없으면 최적해 하나로 결정론적 */
   rng?: Rng
   /** 페이지/앨범 id 접두어. 지정하지 않으면 Date.now() 사용 */
   idSeed?: string
+  /** procedural: 사진에 맞춘 행/열 구조, templates: 기존 템플릿, both: 둘 다 후보 */
+  layoutSource?: LayoutSource
+  /** false면 그룹 없이 시간순으로만 나눈다 */
+  grouping?: GroupingOptions | false
 }
 
-interface DensityRange {
-  min: number
-  max: number
+export interface PlanAlbumInput extends BuildAlbumInput {
+  /** 피사체 상자 여백 */
+  padding?: SubjectPadding
+  /** 피사체 정보가 없을 때 지킬 가운데 영역 (0-1). null이면 전체 크롭 허용 */
+  defaultSubjectBox?: number | null
+  margins?: { margin?: number; gutter?: number }
+  paginationWeights?: Partial<PaginationWeights>
+  /** subject: 피사체 상자 기준 photoX/photoY, center: 가운데 고정 */
+  placement?: "subject" | "center"
+  /** 표지로 쓸 사진 id (없으면 자동 선택) */
+  coverPhotoId?: string
+  /** false면 표지 없이 본문만 */
+  cover?: boolean
+  /** 그룹 첫 페이지에 "날짜 · 장소" 캡션을 단다 */
+  captions?: boolean
+  /** 변형 모드 softmax 온도 */
+  temperature?: number
+  /** 변형 모드에서 목표 사진 수를 ±이만큼 흔든다 */
+  densityJitter?: number
+  /** 같은 사진·같은 옵션으로 여러 번 계획할 때(변형 후보) 공유하는 구간 레이아웃 캐시 */
+  layoutCache?: Map<string, SolvedPage[]>
 }
 
-const DENSITY_RANGES: Record<AlbumDensity, DensityRange> = {
-  sparse: { min: 1, max: 2 },
-  medium: { min: 3, max: 5 },
-  dense: { min: 5, max: 8 },
+export interface PlacementDiagnostic {
+  photoId: string
+  pageIndex: number
+  /** 셀 위치/크기 (mm) */
+  cell: { x: number; y: number; width: number; height: number }
+  photoX: number
+  photoY: number
+  fit: "cover" | "contain"
+  subjectCut: number
 }
 
-const DEFAULT_DENSITY_RANGE: DensityRange = { min: 2, max: 4 }
+export interface PlanAlbumResult {
+  album: Album
+  groups: PhotoGroup[]
+  boundaries: Boundary[]
+  /** off: 그룹 끔, chronological: 시간 정보 부족으로 시간순만 */
+  groupingMode: "grouped" | "chronological" | "off"
+  diagnostics: {
+    placements: PlacementDiagnostic[]
+    /** contain(레터박스)으로 들어간 사진 id */
+    contained: string[]
+    cover: { photoId: string; framed: boolean } | null
+    /** 페이지별 구조 설명 (예: rows:2-1, template:<id>) */
+    pageLabels: string[]
+  }
+}
 
 const GRID_GAP = 2
 const CENTER_PERCENT = 50
-const JITTER_PERCENT = 20
+/** 액자형 표지에서 사진이 차지할 수 있는 최대 페이지 높이 비율 */
+const FRAMED_COVER_MAX_HEIGHT = 0.8
+/** 액자형 표지에서 사진 아래 타이틀 공간 (mm) */
+const FRAMED_COVER_TITLE_SPACE_MM = 30
+const FULL_BLEED_TITLE_Y = 85
+const DEFAULT_PHOTO_SCORE = 0.5
 
 /** 결정론적 난수 생성기 (mulberry32) — 같은 seed면 같은 앨범이 재현된다 */
 export function createRng(seed: number): Rng {
@@ -56,18 +112,12 @@ export function createRng(seed: number): Rng {
   }
 }
 
-/** A4 페이지의 mm 크기 */
-export function pageSizeMm(orientation: "portrait" | "landscape"): { width: number; height: number } {
-  return orientation === "portrait"
-    ? { width: A4_SIZE.WIDTH, height: A4_SIZE.HEIGHT }
-    : { width: A4_SIZE.HEIGHT, height: A4_SIZE.WIDTH }
-}
-
-/** 템플릿이 없을 때 쓰는 격자 폴백 레이아웃 */
+/** 단순 격자 레이아웃 (레이아웃 관리자 등에서 쓰는 폴백). 사진 위치는 가운데 고정 */
 export function generateGridLayout(
   photoCount: number,
-  orientation: "portrait" | "landscape",
-  rng: Rng,
+  // 예전 시그니처 호환용 (지터 제거로 더 이상 쓰지 않음)
+  _orientation?: "portrait" | "landscape",
+  _rng?: Rng,
 ): Omit<PhotoLayout, "photoId">[] {
   if (photoCount === 3) {
     return [
@@ -101,8 +151,8 @@ export function generateGridLayout(
       y: row * (cellHeight + GRID_GAP),
       width: cellWidth,
       height: cellHeight,
-      photoX: CENTER_PERCENT + (rng() - 0.5) * JITTER_PERCENT,
-      photoY: CENTER_PERCENT + (rng() - 0.5) * JITTER_PERCENT,
+      photoX: CENTER_PERCENT,
+      photoY: CENTER_PERCENT,
     }
   })
 }
@@ -119,156 +169,268 @@ export function pickTemplate(
   return matching[Math.floor(rng() * matching.length)]
 }
 
-/** 사진의 레이아웃 매칭에 쓸 비율. 피사체 경계상자(w/h)가 있으면 그것을, 없으면 사진 전체 비율을 쓴다. */
-function photoMatchRatio(photo: PhotoSpec): number {
-  if (photo.subject?.w && photo.subject?.h) {
-    return (photo.subject.w / photo.subject.h) * (photo.width / photo.height)
-  }
-  return photo.width / photo.height
-}
-
-/** 사진 종횡비와 슬롯 종횡비를 정렬 매칭해 배정 */
+/**
+ * @deprecated fitTemplate(lib/layout/template-fit.ts)를 직접 쓴다.
+ * 템플릿 셀에 사진을 최적 배정한다. 피사체가 들어갈 셀이 없는 사진은 contain으로 넣는다.
+ * 사진 수가 셀 수와 다르면 앞에서부터 채우고 남는 셀은 빈 슬롯으로 둔다.
+ */
 export function assignPhotosToTemplate(
   template: LayoutTemplate,
   pagePhotos: readonly PhotoSpec[],
+  orientation: "portrait" | "landscape" = template.orientation,
 ): PhotoLayout[] {
-  const sortedPhotos = [...pagePhotos].sort((a, b) => photoMatchRatio(a) - photoMatchRatio(b))
-  const slotsWithIndex = template.layouts.map((layout, index) => ({ ...layout, originalIndex: index }))
-  slotsWithIndex.sort((a, b) => a.width / a.height - b.width / b.height)
+  const pageMm = pageSizeMm(orientation)
+  const fitted = fitTemplate(template, pagePhotos, pageMm, { allowContain: true })
+  if (fitted) return cellsToLayouts(fitted.cells, pageMm).map(({ layout }) => layout)
 
-  const assignment = new Map<number, string>()
-  slotsWithIndex.forEach((slot, i) => {
-    const photo = sortedPhotos[i]
-    if (photo) assignment.set(slot.originalIndex, photo.id)
-  })
+  return template.layouts.map((layout, index) => ({ ...layout, photoId: pagePhotos[index]?.id ?? "" }))
+}
 
-  return template.layouts.map((layout, index) => ({
-    ...layout,
-    photoId: assignment.get(index) ?? "",
-  }))
+export interface CoverChoice {
+  photo: PhotoSpec
+  layout: PhotoLayout
+  placement: Placement
+  /** true면 전면이 아니라 사진 비율 그대로의 액자형 표지 */
+  framed: boolean
+  titlePosition: { x: number; y: number }
+}
+
+export interface PickCoverOptions extends GeometryOptions {
+  coverPhotoId?: string
+  margin?: number
+  placement?: "subject" | "center"
 }
 
 /**
- * object-fit: cover 기준으로 실제 화면에 보이는 원본 비율.
- * 1이면 잘림 없음, 0.6이면 원본의 60%만 보인다는 뜻.
+ * 표지를 고른다. 전면(페이지 비율)으로 넣어도 피사체가 잘리지 않는 사진 중 점수 × 보이는 비율이 가장 높은 것.
+ * 그런 사진이 없으면 가장 점수가 높은 사진을 원본 비율 그대로 액자처럼 넣고 타이틀을 아래에 둔다.
  */
-export function visibleRatio(imageRatio: number, frameRatio: number): number {
-  if (imageRatio <= 0 || frameRatio <= 0) return 1
-  return Math.min(imageRatio, frameRatio) / Math.max(imageRatio, frameRatio)
-}
+export function pickCover(
+  photos: readonly PhotoSpec[],
+  pageMm: PageSize,
+  options: PickCoverOptions = {},
+): CoverChoice | null {
+  if (photos.length === 0) return null
 
-/**
- * 피사체 중심이 프레임 가운데 오도록 photoX/photoY를 계산한다.
- * pdf-export.ts의 crop 수식(object-position)과 동일한 좌표계를 사용.
- */
-export function focusLayoutOnSubject(
-  layout: PhotoLayout,
-  photo: PhotoSpec,
-  orientation: "portrait" | "landscape",
-): PhotoLayout {
-  const subject = photo.subject
-  if (!subject || photo.width <= 0 || photo.height <= 0) return layout
+  const pageRatio = pageMm.width / pageMm.height
+  const score = (photo: PhotoSpec) => photo.score ?? DEFAULT_PHOTO_SCORE
+  const bestBy = (list: readonly PhotoSpec[], value: (photo: PhotoSpec) => number) =>
+    list.reduce((best, photo) => (value(photo) > value(best) ? photo : best))
 
-  const page = pageSizeMm(orientation)
-  const frameRatio = ((layout.width / 100) * page.width) / ((layout.height / 100) * page.height)
-  const imageRatio = photo.width / photo.height
-  if (!Number.isFinite(frameRatio) || frameRatio <= 0) return layout
+  const forced = options.coverPhotoId ? photos.find((photo) => photo.id === options.coverPhotoId) : undefined
+  const fullBleedOk = (photo: PhotoSpec) => isRatioFeasible(feasibleRange(photo, options), pageRatio)
+  const candidates = forced ? [forced].filter(fullBleedOk) : photos.filter(fullBleedOk)
+  const placementOptions = { ...options, mode: options.placement }
 
-  const clamp = (value: number) => Math.max(0, Math.min(100, value))
-
-  if (imageRatio > frameRatio) {
-    // 좌우가 잘린다 → 가로 위치만 보정
-    const visibleWidthFraction = frameRatio / imageRatio
-    const slack = 1 - visibleWidthFraction
-    if (slack <= 0) return layout
-    const photoX = clamp(((subject.x / 100 - visibleWidthFraction / 2) / slack) * 100)
-    return { ...layout, photoX, photoY: CENTER_PERCENT }
+  if (candidates.length > 0) {
+    const photo = bestBy(candidates, (p) => score(p) * visibleRatio(imageRatio(p), pageRatio))
+    const placement = placePhoto({ width: pageMm.width, height: pageMm.height }, photo, placementOptions)
+    return {
+      photo,
+      placement,
+      framed: false,
+      titlePosition: { x: 50, y: FULL_BLEED_TITLE_Y },
+      layout: {
+        id: "cover-layout",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        photoId: photo.id,
+        photoX: placement.photoX,
+        photoY: placement.photoY,
+      },
+    }
   }
 
-  // 상하가 잘린다 → 세로 위치만 보정
-  const visibleHeightFraction = imageRatio / frameRatio
-  const slack = 1 - visibleHeightFraction
-  if (slack <= 0) return layout
-  const photoY = clamp(((subject.y / 100 - visibleHeightFraction / 2) / slack) * 100)
-  return { ...layout, photoX: CENTER_PERCENT, photoY }
+  // 액자형 표지: 원본 비율 그대로 (잘림 없음)
+  const photo = forced ?? bestBy(photos, score)
+  const margin = options.margin ?? DEFAULT_MARGIN_MM
+  const ratio = imageRatio(photo)
+  const maxWidth = pageMm.width - 2 * margin
+  const maxHeight = Math.min(FRAMED_COVER_MAX_HEIGHT * pageMm.height, pageMm.height - 2 * margin - FRAMED_COVER_TITLE_SPACE_MM)
+  const width = Math.min(maxWidth, maxHeight * ratio)
+  const height = width / ratio
+  const x = (pageMm.width - width) / 2
+  const y = Math.max(margin, (pageMm.height - height - FRAMED_COVER_TITLE_SPACE_MM) / 2)
+  const placement = placePhoto({ width, height }, photo, placementOptions)
+
+  return {
+    photo,
+    placement,
+    framed: true,
+    titlePosition: { x: 50, y: ((y + height + FRAMED_COVER_TITLE_SPACE_MM / 2) / pageMm.height) * 100 },
+    layout: {
+      id: "cover-layout",
+      x: (x / pageMm.width) * 100,
+      y: (y / pageMm.height) * 100,
+      width: (width / pageMm.width) * 100,
+      height: (height / pageMm.height) * 100,
+      photoId: photo.id,
+      photoX: placement.photoX,
+      photoY: placement.photoY,
+    },
+  }
 }
 
-function densityRange(density: AlbumDensity): DensityRange {
-  return DENSITY_RANGES[density] ?? DEFAULT_DENSITY_RANGE
+function formatDay(epochMs: number): string {
+  const date = new Date(epochMs)
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`
+}
+
+/** 그룹 캡션: "2024.05.12 · 제주 서귀포" */
+function groupCaption(group: PhotoGroup, firstPhoto: PhotoSpec | undefined): string | undefined {
+  const day = group.start !== undefined ? formatDay(group.start) : firstPhoto?.date
+  const parts = [day, group.location].filter((part): part is string => Boolean(part))
+  return parts.length > 0 ? parts.join(" · ") : undefined
 }
 
 /**
- * 사진 목록으로 A4 앨범 한 권을 구성한다.
- * 첫 페이지는 표지(사진 1장 전면), 이후 페이지는 밀도에 따라 무작위 템플릿으로 채운다.
+ * 사진 목록으로 A4 앨범 한 권을 계획한다 (사진은 시간순으로 넘겨야 한다).
+ * 표지 → 그룹 → 페이지 나누기(DP) → 셀 풀이 → 피사체 기준 배치. 피사체는 잘리지 않는 것이 원칙이고,
+ * 어쩔 수 없는 경우 contain(레터박스)으로 넣고 diagnostics.contained에 남긴다.
  */
-export function buildAlbum(input: BuildAlbumInput): Album {
+export function planAlbum(input: PlanAlbumInput): PlanAlbumResult {
   const {
     photos,
     templates,
     theme,
     orientation,
     density = "medium",
-    focusOnSubject = false,
-    rng = Math.random,
+    rng,
     idSeed = String(Date.now()),
+    layoutSource = "both",
+    grouping = {},
+    padding,
+    defaultSubjectBox,
+    margins,
+    paginationWeights,
+    coverPhotoId,
+    cover = true,
+    captions = false,
+    temperature,
+    densityJitter,
+    layoutCache,
   } = input
+  const placement = input.placement ?? (input.focusOnSubject === false ? "center" : "subject")
+  const geometry: GeometryOptions = { padding, defaultBox: defaultSubjectBox }
+  const pageMm = pageSizeMm(orientation)
+  const box = contentBox(orientation, margins?.margin ?? DEFAULT_MARGIN_MM, margins?.gutter ?? DEFAULT_GUTTER_MM)
 
   const pages: AlbumPage[] = []
-  const remaining = [...photos]
-  const photoById = new Map(photos.map((photo) => [photo.id, photo]))
+  const placements: PlacementDiagnostic[] = []
 
-  const applyFocus = (layouts: PhotoLayout[]): PhotoLayout[] => {
-    if (!focusOnSubject) return layouts
-    return layouts.map((layout) => {
-      const photo = photoById.get(layout.photoId)
-      return photo ? focusLayoutOnSubject(layout, photo, orientation) : layout
-    })
-  }
+  // 표지 사진은 본문에서 뺀다 (두 번 나오지 않게)
+  const coverChoice = cover
+    ? pickCover(photos, pageMm, { ...geometry, coverPhotoId, margin: box.margin, placement })
+    : null
+  const body = coverChoice ? photos.filter((photo) => photo.id !== coverChoice.photo.id) : [...photos]
 
-  // 표지: 사진 1장으로 전면을 채우고 날짜를 타이틀로
-  const coverPhoto = remaining.shift()
-  if (coverPhoto) {
-    const coverLayout: PhotoLayout = {
-      id: "cover-layout",
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      photoId: coverPhoto.id,
-      photoX: CENTER_PERCENT,
-      photoY: CENTER_PERCENT,
-    }
+  if (coverChoice) {
+    const firstDated = photos.find((photo) => photo.date)
     pages.push({
       id: `page-${idSeed}-cover`,
-      layouts: applyFocus([coverLayout]),
+      layouts: [coverChoice.layout],
       isCoverPage: true,
-      title: coverPhoto.date || new Date().toISOString().split("T")[0],
-      titlePosition: { x: 50, y: 85 },
+      title: firstDated?.date || new Date().toISOString().split("T")[0],
+      titlePosition: coverChoice.titlePosition,
+    })
+    const { layout } = coverChoice
+    placements.push({
+      photoId: coverChoice.photo.id,
+      pageIndex: 0,
+      cell: {
+        x: (layout.x / 100) * pageMm.width,
+        y: (layout.y / 100) * pageMm.height,
+        width: (layout.width / 100) * pageMm.width,
+        height: (layout.height / 100) * pageMm.height,
+      },
+      photoX: coverChoice.placement.photoX,
+      photoY: coverChoice.placement.photoY,
+      fit: coverChoice.placement.fit,
+      subjectCut: coverChoice.placement.subjectCut,
     })
   }
 
-  const { min, max } = densityRange(density)
+  const grouped =
+    grouping === false
+      ? {
+          groups: body.length > 0 ? [{ id: "g1", photoIds: body.map((p) => p.id), boundaryAfter: "none" as const }] : [],
+          boundaries: body.slice(1).map((_, index): Boundary => ({ index, kind: "unknown", reason: "grouping-off" })),
+          mode: "off" as const,
+        }
+      : groupPhotos(body, grouping)
 
-  let pageIndex = 0
-  while (remaining.length > 0) {
-    const photosPerPage = Math.min(min + Math.floor(rng() * (max - min + 1)), remaining.length)
-    const pagePhotos = remaining.splice(0, photosPerPage)
-    const template = pickTemplate(templates, photosPerPage, orientation, rng)
+  const groupOf = new Map<string, PhotoGroup>()
+  for (const group of grouped.groups) for (const id of group.photoIds) groupOf.set(id, group)
 
-    const layouts = template
-      ? assignPhotosToTemplate(template, pagePhotos)
-      : generateGridLayout(photosPerPage, orientation, rng).map((layout, index) => ({
-          ...layout,
-          photoId: pagePhotos[index]?.id ?? "",
-        }))
+  const plans = paginate(body, grouped.boundaries, {
+    ...geometry,
+    box,
+    orientation,
+    density,
+    layoutSource,
+    templates,
+    weights: paginationWeights,
+    rng,
+    temperature,
+    densityJitter,
+    cache: layoutCache,
+  })
+
+  const seenGroups = new Set<string>()
+  const pageLabels: string[] = []
+  plans.forEach((plan, index) => {
+    const placed = cellsToLayouts(plan.page.cells, pageMm, { ...geometry, mode: placement })
+    const groupIds = [...new Set(plan.photos.map((photo) => groupOf.get(photo.id)?.id).filter((id): id is string => !!id))]
+    const firstGroup = groupOf.get(plan.photos[0].id)
+    const continued = firstGroup ? seenGroups.has(firstGroup.id) : false
+    groupIds.forEach((id) => seenGroups.add(id))
+
+    const caption = captions && firstGroup && !continued ? groupCaption(firstGroup, plan.photos[0]) : undefined
+    const pageIndex = pages.length
 
     pages.push({
-      id: `page-${idSeed}-${pageIndex}`,
-      layouts: applyFocus(layouts),
-      templateId: template?.id,
+      id: `page-${idSeed}-${index}`,
+      layouts: placed.map(({ layout }) => layout),
+      ...(plan.page.templateId ? { templateId: plan.page.templateId } : {}),
+      ...(groupIds.length > 0 ? { groupIds } : {}),
+      ...(continued ? { continued: true } : {}),
+      ...(caption ? { caption } : {}),
     })
-    pageIndex += 1
-  }
+    pageLabels.push(plan.page.label)
 
-  return { id: `album-${idSeed}`, pages, theme, orientation, showMetadata: true }
+    for (const { cell, placement: p } of placed) {
+      placements.push({
+        photoId: cell.photo.id,
+        pageIndex,
+        cell: { x: cell.x, y: cell.y, width: cell.width, height: cell.height },
+        photoX: p.photoX,
+        photoY: p.photoY,
+        fit: p.fit,
+        subjectCut: p.subjectCut,
+      })
+    }
+  })
+
+  return {
+    album: { id: `album-${idSeed}`, pages, theme, orientation, showMetadata: true },
+    groups: grouped.groups,
+    boundaries: grouped.boundaries,
+    groupingMode: grouped.mode,
+    diagnostics: {
+      placements,
+      contained: placements.filter((p) => p.fit === "contain").map((p) => p.photoId),
+      cover: coverChoice ? { photoId: coverChoice.photo.id, framed: coverChoice.framed } : null,
+      pageLabels,
+    },
+  }
+}
+
+/**
+ * 사진 목록으로 A4 앨범 한 권을 구성한다 (planAlbum의 호환 래퍼 — 웹 앱이 쓰는 진입점).
+ * 첫 페이지는 표지, 이후 페이지는 그룹과 사진 비율에 맞춰 나눈다.
+ */
+export function buildAlbum(input: BuildAlbumInput): Album {
+  return planAlbum(input).album
 }

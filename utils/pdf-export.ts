@@ -1,5 +1,5 @@
 import jsPDF from "jspdf"
-import type { Album, Photo, PhotoLayout, AlbumPage } from "@/types/album"
+import type { Album, Photo, AlbumPage } from "@/types/album"
 import { A4_SIZE } from "@/types/album"
 
 /**
@@ -33,13 +33,20 @@ const THEME_TEXT_COLORS: Record<string, string> = {
   black: "#FFFFFF",
 };
 
-function drawCroppedImageToCanvas(
-  img: HTMLImageElement,
-  layout: PhotoLayout,
-  photo: Photo,
-  framePx: { width: number; height: number },
-  photoX: number,
+interface PhotoPlacement {
+  /** object-position (0~100, 기본 50) */
+  photoX: number
   photoY: number
+  /** cover: 꽉 채우고 넘치는 부분 crop, contain: 자르지 않고 배경색 위에 레터박스 */
+  fit: "cover" | "contain"
+  /** contain일 때 여백을 채울 테마 배경색 */
+  background: string
+}
+
+function drawPhotoToCanvas(
+  img: HTMLImageElement,
+  framePx: { width: number; height: number },
+  placement: PhotoPlacement
 ): HTMLCanvasElement {
   // 프레임 크기(px)
   const frameW = framePx.width
@@ -49,10 +56,28 @@ function drawCroppedImageToCanvas(
   const imgW = img.naturalWidth
   const imgH = img.naturalHeight
 
-  // object-fit: cover 기준, 프레임에 맞게 이미지 비율 계산
   const frameRatio = frameW / frameH
   const imgRatio = imgW / imgH
 
+  // 고해상도 출력을 위해 프레임 크기를 3배로 (PDF 용량과 300dpi 사이 절충, 필요시 2~4로 조정)
+  const scale = 3
+  const canvas = document.createElement("canvas")
+  canvas.width = frameW * scale
+  canvas.height = frameH * scale
+  const ctx = canvas.getContext("2d")!
+
+  if (placement.fit === "contain") {
+    // 사진 전체를 프레임 안에 맞추고 가운데 정렬, 남는 곳은 테마 배경색
+    ctx.fillStyle = placement.background
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    const drawScale = Math.min(canvas.width / imgW, canvas.height / imgH)
+    const drawW = imgW * drawScale
+    const drawH = imgH * drawScale
+    ctx.drawImage(img, (canvas.width - drawW) / 2, (canvas.height - drawH) / 2, drawW, drawH)
+    return canvas
+  }
+
+  // object-fit: cover 기준, 프레임 비율의 최대 crop 창
   let drawW, drawH
   if (imgRatio > frameRatio) {
     // 이미지가 더 넓음: 높이를 프레임에 맞추고, 좌우 crop
@@ -65,17 +90,8 @@ function drawCroppedImageToCanvas(
   }
 
   // object-position: (%) → crop 시작점 계산
-  // photoX, photoY는 0~100, 기본 50
-  const posX = ((photoX ?? 50) / 100) * (imgW - drawW)
-  const posY = ((photoY ?? 50) / 100) * (imgH - drawH)
-
-  // 고해상도 출력을 위해 프레임 크기를 4배로 (A4 300dpi 기준)
-  // PDF 용량 최적화: 해상도 3배(300dpi 기준, 필요시 2~4로 조정)
-  const scale = 3
-  const canvas = document.createElement("canvas")
-  canvas.width = frameW * scale
-  canvas.height = frameH * scale
-  const ctx = canvas.getContext("2d")!
+  const posX = (placement.photoX / 100) * (imgW - drawW)
+  const posY = (placement.photoY / 100) * (imgH - drawH)
 
   ctx.drawImage(
     img,
@@ -243,6 +259,39 @@ function renderTitleToPDF(
   )
 }
 
+/** 그룹 캡션 여백 (mm) — 레이아웃 엔진의 기본 페이지 여백(8mm) 안에 들어간다 */
+const CAPTION_MARGIN_MM = 8
+
+/**
+ * 그룹 캡션("2024.05.12 · 제주 서귀포")을 페이지 아래 여백에 왼쪽 정렬로 렌더링
+ */
+function renderCaptionToPDF(
+  pdf: jsPDF,
+  page: AlbumPage,
+  theme: string,
+  orientation: "portrait" | "landscape"
+) {
+  if (!page.caption || page.isCoverPage) return
+
+  const textColor = THEME_TEXT_COLORS[theme] || "#1F2937"
+  const pageHeight = orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH
+  const textImage = createTextImage(page.caption, textColor, 20)
+
+  const PX_TO_MM = 25.4 / 96
+  const width = textImage.width * PX_TO_MM
+  const height = textImage.height * PX_TO_MM
+
+  // 아래 여백의 세로 가운데에 텍스트 중심을 둔다
+  pdf.addImage(
+    textImage.imageData,
+    "PNG",
+    CAPTION_MARGIN_MM - 10 * PX_TO_MM,
+    pageHeight - CAPTION_MARGIN_MM / 2 - height / 2,
+    width,
+    height
+  )
+}
+
 /**
  * 앨범을 jsPDF 문서로 렌더링 (고해상도, crop/position 반영).
  * 저장/다운로드는 하지 않으므로 헤드리스 렌더링에서도 그대로 재사용할 수 있다.
@@ -270,7 +319,6 @@ export async function buildAlbumPdf(
   const totalPages = album.pages.length
   for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
     const page = album.pages[pageIdx]
-    console.log("PDF page", { pageIdx, page, layouts: page.layouts });
     // PDF 첫 페이지는 addPage 필요 없음
     if (pageIdx > 0) pdf.addPage()
 
@@ -287,7 +335,6 @@ export async function buildAlbumPdf(
 
     // 각 프레임(사진)마다 crop/resize해서 PDF에 addImage
     for (const layout of page.layouts) {
-      console.log("PDF layout", { layout });
       const photo = photos.find(p => p.id === layout.photoId)
       if (!photo) continue
 
@@ -339,11 +386,13 @@ export async function buildAlbumPdf(
         x: (layout.x / 100) * pdfWidthPx,
         y: (layout.y / 100) * pdfHeightPx,
       }
-      const photoX = layout.photoX ?? 50
-      const photoY = layout.photoY ?? 50
-
       // crop/resize된 이미지를 canvas에 그림
-      const canvas = drawCroppedImageToCanvas(img, layout, photo, framePx, photoX, photoY)
+      const canvas = drawPhotoToCanvas(img, framePx, {
+        photoX: layout.photoX ?? 50,
+        photoY: layout.photoY ?? 50,
+        fit: layout.fit ?? "cover",
+        background: themeColor,
+      })
       // PDF 용량 최적화: JPEG 품질 0.8로 저장
       const imgData = canvas.toDataURL("image/jpeg", 0.8)
       if (!imgData || imgData.length < 100) {
@@ -356,14 +405,6 @@ export async function buildAlbumPdf(
       const pdfFrameH = (layout.height / 100) * (album.orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH)
       const pdfFrameX = (layout.x / 100) * (album.orientation === "portrait" ? A4_SIZE.WIDTH : A4_SIZE.HEIGHT)
       const pdfFrameY = (layout.y / 100) * (album.orientation === "portrait" ? A4_SIZE.HEIGHT : A4_SIZE.WIDTH)
-
-      // 디버깅: addImage 직전 값 출력
-      console.log("PDF addImage", {
-        photoUrl: photo.url,
-        imgDataPrefix: imgData.slice(0, 30),
-        imgDataLength: imgData.length,
-        pdfFrameX, pdfFrameY, pdfFrameW, pdfFrameH
-      })
 
       pdf.addImage(
         imgData,
@@ -382,6 +423,7 @@ export async function buildAlbumPdf(
 
     // 타이틀 렌더링 (표지 페이지나 타이틀이 있는 페이지)
     renderTitleToPDF(pdf, page, album.theme, album.orientation)
+    renderCaptionToPDF(pdf, page, album.theme, album.orientation)
 
     if (onProgress) {
       onProgress(Math.round(((pageIdx + 1) / totalPages) * 100))

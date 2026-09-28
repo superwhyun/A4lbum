@@ -9,7 +9,9 @@ import { buildAlbums } from "@/cli/commands/build"
 import { scanDirectory } from "@/cli/commands/scan"
 import { readEnv } from "@/cli/env"
 import { fileProvider, heuristicProvider, httpProvider, type VisionProvider } from "@/cli/select/providers"
-import { MANIFEST_VERSION, type ScanManifest } from "@/cli/types"
+import { upgradeManifest } from "@/cli/ingest/manifest"
+import type { ScanManifest } from "@/cli/types"
+import type { LayoutSource } from "@/lib/album-generator"
 import { THEMES, type AlbumDensity } from "@/types/album"
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -24,9 +26,31 @@ const DEFAULTS = {
   duplicateDistance: 8,
   manifest: "manifest.json",
   outDir: "album-out",
+  groupGap: 180,
+  groupDistance: 5,
+  layout: "both" as LayoutSource,
+  subjectPadding: 0.1,
+  margin: 8,
 } as const
 
 const DENSITIES: readonly AlbumDensity[] = ["sparse", "medium", "dense"]
+const LAYOUT_SOURCES: readonly LayoutSource[] = ["procedural", "templates", "both"]
+
+function parsePositiveNumber(value: string): number {
+  const parsed = Number.parseFloat(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new InvalidArgumentError("0보다 큰 수를 입력하세요")
+  }
+  return parsed
+}
+
+function parseNonNegativeNumber(value: string): number {
+  const parsed = Number.parseFloat(value)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new InvalidArgumentError("0 이상의 수를 입력하세요")
+  }
+  return parsed
+}
 
 function parsePositiveInt(value: string): number {
   const parsed = Number.parseInt(value, 10)
@@ -92,16 +116,7 @@ function resolveProvider(flags: SelectionFlags): VisionProvider {
 
 async function loadManifest(path: string): Promise<ScanManifest> {
   const raw = await readFile(resolve(path), "utf8")
-  const manifest = JSON.parse(raw) as ScanManifest
-
-  if (manifest.version !== MANIFEST_VERSION) {
-    throw new Error(`매니페스트 버전이 다릅니다 (기대 ${MANIFEST_VERSION}, 실제 ${manifest.version}). 다시 scan하세요`)
-  }
-  if (!Array.isArray(manifest.photos)) {
-    throw new Error("매니페스트에 photos 배열이 없습니다")
-  }
-
-  return manifest
+  return upgradeManifest(JSON.parse(raw) as ScanManifest)
 }
 
 interface ScanFlags {
@@ -151,6 +166,15 @@ interface BuildFlags extends SelectionFlags {
   maxPhotos?: number
   renderAll: boolean
   metadata: boolean
+  groupGap: number
+  groupDistance: number
+  /** --no-grouping이면 false */
+  grouping: boolean
+  layout: LayoutSource
+  subjectPadding: number
+  cover?: string
+  margin: number
+  captions: boolean
 }
 
 async function runBuild(manifest: ScanManifest, flags: BuildFlags): Promise<void> {
@@ -171,6 +195,14 @@ async function runBuild(manifest: ScanManifest, flags: BuildFlags): Promise<void
     maxPhotos: flags.maxPhotos,
     renderAll: flags.renderAll,
     showMetadata: flags.metadata,
+    layoutSource: flags.layout,
+    grouping: flags.grouping
+      ? { hardGapMinutes: flags.groupGap, hardDistanceKm: flags.groupDistance }
+      : false,
+    subjectPadding: flags.subjectPadding,
+    coverFileName: flags.cover,
+    margin: flags.margin,
+    captions: flags.captions,
     onLog: (message) => console.log(`[build] ${message}`),
   })
 
@@ -205,6 +237,19 @@ function addBuildOptions(command: Command): Command {
     .option("--max-photos <n>", "앨범에 넣을 최대 장수", parsePositiveInt)
     .option("--render-all", "후보 전부를 PDF로 저장", false)
     .option("--no-metadata", "사진에 날짜/장소 표기 넣지 않음")
+    .option("--group-gap <min>", "이 간격(분)을 넘으면 새 그룹", parsePositiveNumber, DEFAULTS.groupGap)
+    .option("--group-distance <km>", "이 거리(km) 넘게 이동하면 새 그룹", parsePositiveNumber, DEFAULTS.groupDistance)
+    .option("--no-grouping", "시간/장소 그룹 없이 시간순으로만 페이지 나눔")
+    .option(
+      "--layout <source>",
+      "페이지 레이아웃 후보 (procedural: 사진에 맞춘 행/열, templates: 기본 템플릿, both)",
+      parseChoice(LAYOUT_SOURCES, "레이아웃"),
+      DEFAULTS.layout,
+    )
+    .option("--subject-padding <ratio>", "피사체 상자 여백 비율 (위쪽은 2배)", parseRatio, DEFAULTS.subjectPadding)
+    .option("--cover <fileName>", "표지로 쓸 사진 파일 이름 (기본은 자동 선택)")
+    .option("--margin <mm>", "페이지 여백 (mm)", parseNonNegativeNumber, DEFAULTS.margin)
+    .option("--captions", "그룹 첫 페이지에 날짜 · 장소 캡션", false)
 }
 
 const program = new Command()

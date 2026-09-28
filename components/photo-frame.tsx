@@ -113,8 +113,8 @@ export function PhotoFrame({
       const moveX = (deltaX / rect.width) * 50
       const moveY = (deltaY / rect.height) * 50
 
-      const currentPhotoX = layout.photoX || 50
-      const currentPhotoY = layout.photoY || 50
+      const currentPhotoX = layout.photoX ?? 50
+      const currentPhotoY = layout.photoY ?? 50
 
       const newPhotoX = Math.max(0, Math.min(100, currentPhotoX - moveX))
       const newPhotoY = Math.max(0, Math.min(100, currentPhotoY - moveY))
@@ -146,8 +146,8 @@ export function PhotoFrame({
     }
   }, [isDragging, handleMouseMove, handleMouseUp])
 
-  const photoX = layout.photoX || 50
-  const photoY = layout.photoY || 50
+  const photoX = layout.photoX ?? 50
+  const photoY = layout.photoY ?? 50
 
   return (
     <div
@@ -202,7 +202,7 @@ export function PhotoFrame({
           <img
             src={previewUrl || "/placeholder.svg"}
             alt=""
-            className="w-full h-full object-cover select-none"
+            className={`w-full h-full select-none ${layout.fit === "contain" ? "object-contain" : "object-cover"}`}
             style={{
               objectPosition: `${photoX}% ${photoY}%`,
               transform: isDragging ? "scale(1.02)" : "scale(1)",

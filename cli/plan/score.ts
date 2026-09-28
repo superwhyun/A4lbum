@@ -1,6 +1,16 @@
-// 후보 앨범을 정량 평가한다 (잘림 / 피사체 보존 / 화질 / 시간순 / 밀도 균형)
-import { pageSizeMm, visibleRatio } from "@/lib/album-generator"
-import type { Album, PhotoLayout } from "@/types/album"
+// 후보 앨범을 정량 평가한다 (피사체 보존 / 잘림 / 지면 채움 / 그룹 응집 / 화질 / 시간순 / 균형)
+// 레이아웃과 같은 기하 계산(lib/layout/geometry.ts)을 써서 배치와 평가의 기준이 어긋나지 않게 한다.
+import {
+  cropWindow,
+  imageRatio,
+  NO_SUBJECT_PADDING,
+  normalizeSubject,
+  pageSizeMm,
+  visibleRatio,
+  visibleSubjectFraction,
+} from "@/lib/layout/geometry"
+import type { SubjectBox } from "@/lib/layout/types"
+import type { Album } from "@/types/album"
 import type { VariantScore } from "@/cli/types"
 
 export interface ScoringPhoto {
@@ -9,113 +19,131 @@ export interface ScoringPhoto {
   height: number
   /** 비전/휴리스틱 판정 점수 0-1 */
   score: number
-  subject?: { x: number; y: number }
+  /** 피사체 경계상자 (중심 + 크기, 이미지 대비 %) */
+  subject?: SubjectBox
   takenAt?: string
+  /** 시간/장소 그룹 id */
+  groupId?: string
 }
 
-const WEIGHTS = {
-  framing: 0.25,
-  subjectSafety: 0.2,
-  photoQuality: 0.2,
-  coverage: 0.15,
-  chronology: 0.1,
-  balance: 0.1,
-} as const
+export interface ScoreWeights {
+  subjectSafety: number
+  framing: number
+  coverage: number
+  groupCohesion: number
+  photoQuality: number
+  chronology: number
+  balance: number
+}
 
-/** 페이지당 사진 수 표준편차를 이 값으로 정규화 */
-const BALANCE_STDEV_CEILING = 3
+export const DEFAULT_SCORE_WEIGHTS: ScoreWeights = {
+  subjectSafety: 0.3,
+  framing: 0.2,
+  coverage: 0.15,
+  groupCohesion: 0.15,
+  photoQuality: 0.1,
+  chronology: 0.05,
+  balance: 0.05,
+}
+
+export interface ScoreOptions {
+  weights?: Partial<ScoreWeights>
+  /** 콘텐츠 영역을 정하는 페이지 여백 (mm). coverage의 분모 */
+  marginMm?: number
+}
+
+const DEFAULT_MARGIN_MM = 8
+/** 그룹 응집 점수 중 "나뉜 그룹이 연속 페이지에 있는가"의 비중 */
+const SPLIT_ORDER_SHARE = 0.2
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
 
 const mean = (values: readonly number[]): number =>
   values.length === 0 ? 1 : values.reduce((sum, value) => sum + value, 0) / values.length
 
-interface CropWindow {
-  /** 보이는 구간의 시작점과 폭 (0-1) */
-  start: number
-  size: number
+const weightedMean = (pairs: ReadonlyArray<{ value: number; weight: number }>): number => {
+  const total = pairs.reduce((sum, pair) => sum + pair.weight, 0)
+  return total <= 0 ? 1 : pairs.reduce((sum, pair) => sum + pair.value * pair.weight, 0) / total
 }
 
-/** photoX/photoY와 종횡비로부터 실제로 보이는 구간을 구한다 */
-function cropWindow(imageRatio: number, frameRatio: number, positionPercent: number, axis: "x" | "y"): CropWindow {
-  const cropsHorizontally = imageRatio > frameRatio
-  const cropsThisAxis = axis === "x" ? cropsHorizontally : !cropsHorizontally
-
-  if (!cropsThisAxis) return { start: 0, size: 1 }
-
-  const size = clamp01(axis === "x" ? frameRatio / imageRatio : imageRatio / frameRatio)
-  const slack = 1 - size
-  const start = clamp01((positionPercent / 100) * slack)
-  return { start, size }
-}
-
-/** 피사체가 프레임 중앙에 가까우면 1, 잘려나가면 0 */
-function subjectSafety(photo: ScoringPhoto, layout: PhotoLayout, frameRatio: number): number {
-  if (!photo.subject) return 1
-
-  const imageRatio = photo.width / photo.height
-  const axes: Array<{ axis: "x" | "y"; position: number; target: number }> = [
-    { axis: "x", position: layout.photoX ?? 50, target: photo.subject.x / 100 },
-    { axis: "y", position: layout.photoY ?? 50, target: photo.subject.y / 100 },
-  ]
-
-  const margins = axes.map(({ axis, position, target }) => {
-    const window = cropWindow(imageRatio, frameRatio, position, axis)
-    if (window.size <= 0) return 0
-    const distanceToEdge = Math.min(target - window.start, window.start + window.size - target)
-    return clamp01(distanceToEdge / (window.size / 2))
-  })
-
-  return Math.min(...margins)
-}
-
-function standardDeviation(values: readonly number[]): number {
+function coefficientOfVariation(values: readonly number[]): number {
   if (values.length <= 1) return 0
   const average = mean(values)
+  if (average <= 0) return 0
   const variance = values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length
-  return Math.sqrt(variance)
+  return Math.sqrt(variance) / average
 }
 
-export function scoreAlbum(album: Album, photos: readonly ScoringPhoto[]): VariantScore {
+/** 피사체 상자(여백 없이) 중 크롭 창 안에 남은 비율. 피사체 정보가 없으면 1 */
+function subjectSafety(photo: ScoringPhoto, frameRatio: number, photoX = 50, photoY = 50, fit: "cover" | "contain" = "cover"): number {
+  if (!photo.subject) return 1
+  const { id, width, height, subject } = photo
+  const rect = normalizeSubject({ id, width, height, subject }, { padding: NO_SUBJECT_PADDING, defaultBox: null })
+  return visibleSubjectFraction(rect, cropWindow(imageRatio(photo), frameRatio, photoX, photoY, fit))
+}
+
+/** 나뉜 그룹이 연속된 페이지에 놓였는지 (나뉜 그룹이 없으면 1) */
+function splitOrder(pagesByGroup: Map<string, number[]>): number {
+  const split = [...pagesByGroup.values()].filter((pages) => pages.length > 1)
+  if (split.length === 0) return 1
+  const consecutive = split.filter((pages) => pages.every((page, i) => i === 0 || page === pages[i - 1] + 1))
+  return consecutive.length / split.length
+}
+
+export function scoreAlbum(album: Album, photos: readonly ScoringPhoto[], options: ScoreOptions = {}): VariantScore {
+  const weights = { ...DEFAULT_SCORE_WEIGHTS, ...options.weights }
   const photoById = new Map(photos.map((photo) => [photo.id, photo]))
   const page = pageSizeMm(album.orientation)
+  const margin = options.marginMm ?? DEFAULT_MARGIN_MM
+  const contentArea = Math.max(1, (page.width - 2 * margin) * (page.height - 2 * margin))
 
-  const framingScores: number[] = []
-  const safetyScores: number[] = []
+  const framing: Array<{ value: number; weight: number }> = []
+  const safety: Array<{ value: number; weight: number }> = []
   const qualityScores: number[] = []
   const coverageScores: number[] = []
+  const purityScores: number[] = []
+  const areaPerPhoto: number[] = []
   const placedTimes: number[] = []
-  const photosPerPage: number[] = []
+  const pagesByGroup = new Map<string, number[]>()
 
-  for (const albumPage of album.pages) {
+  album.pages.forEach((albumPage, pageIndex) => {
     let placedOnPage = 0
-    let coveredArea = 0
+    let filledArea = 0
+    const groupsOnPage = new Set<string>()
 
     for (const layout of albumPage.layouts) {
       const photo = photoById.get(layout.photoId)
       if (!photo || photo.width <= 0 || photo.height <= 0) continue
 
-      placedOnPage += 1
-      coveredArea += (layout.width / 100) * (layout.height / 100)
-      const frameRatio = ((layout.width / 100) * page.width) / ((layout.height / 100) * page.height)
-      const imageRatio = photo.width / photo.height
+      const widthMm = (layout.width / 100) * page.width
+      const heightMm = (layout.height / 100) * page.height
+      if (widthMm <= 0 || heightMm <= 0) continue
 
-      framingScores.push(visibleRatio(imageRatio, frameRatio))
-      safetyScores.push(subjectSafety(photo, layout, frameRatio))
+      const area = widthMm * heightMm
+      const frameRatio = widthMm / heightMm
+      const fit = layout.fit ?? "cover"
+      const visible = visibleRatio(imageRatio(photo), frameRatio)
+
+      placedOnPage += 1
+      filledArea += fit === "contain" ? area * visible : area
+      safety.push({ value: subjectSafety(photo, frameRatio, layout.photoX, layout.photoY, fit), weight: area })
+      if (!albumPage.isCoverPage) framing.push({ value: fit === "contain" ? 1 : visible, weight: area })
       qualityScores.push(photo.score)
       if (photo.takenAt) placedTimes.push(Date.parse(photo.takenAt))
+      if (photo.groupId) groupsOnPage.add(photo.groupId)
     }
 
-    if (!albumPage.isCoverPage) {
-      photosPerPage.push(placedOnPage)
-      coverageScores.push(clamp01(coveredArea))
-    }
-  }
+    if (albumPage.isCoverPage || placedOnPage === 0) return
 
-  const framing = mean(framingScores)
-  const safety = mean(safetyScores)
-  const quality = mean(qualityScores)
-  const coverage = mean(coverageScores)
+    coverageScores.push(clamp01(filledArea / contentArea))
+    areaPerPhoto.push(filledArea / placedOnPage)
+    if (groupsOnPage.size > 0) purityScores.push(groupsOnPage.size === 1 ? 1 : 0)
+    for (const groupId of groupsOnPage) {
+      const pages = pagesByGroup.get(groupId) ?? []
+      pages.push(pageIndex)
+      pagesByGroup.set(groupId, pages)
+    }
+  })
 
   let ordered = 0
   for (let i = 1; i < placedTimes.length; i++) {
@@ -123,16 +151,30 @@ export function scoreAlbum(album: Album, photos: readonly ScoringPhoto[]): Varia
   }
   const chronology = placedTimes.length <= 1 ? 1 : ordered / (placedTimes.length - 1)
 
-  const balance = clamp01(1 - standardDeviation(photosPerPage) / BALANCE_STDEV_CEILING)
+  const groupSplitOrder = splitOrder(pagesByGroup)
+  const groupCohesion = (1 - SPLIT_ORDER_SHARE) * mean(purityScores) + SPLIT_ORDER_SHARE * groupSplitOrder
 
+  const score = {
+    framing: weightedMean(framing),
+    subjectSafety: weightedMean(safety),
+    photoQuality: mean(qualityScores),
+    coverage: mean(coverageScores),
+    groupCohesion,
+    chronology,
+    balance: clamp01(1 - coefficientOfVariation(areaPerPhoto)),
+  }
+
+  const weightSum = Object.values(weights).reduce((sum, value) => sum + value, 0) || 1
   const total = clamp01(
-    framing * WEIGHTS.framing +
-      safety * WEIGHTS.subjectSafety +
-      quality * WEIGHTS.photoQuality +
-      coverage * WEIGHTS.coverage +
-      chronology * WEIGHTS.chronology +
-      balance * WEIGHTS.balance,
+    (score.subjectSafety * weights.subjectSafety +
+      score.framing * weights.framing +
+      score.coverage * weights.coverage +
+      score.groupCohesion * weights.groupCohesion +
+      score.photoQuality * weights.photoQuality +
+      score.chronology * weights.chronology +
+      score.balance * weights.balance) /
+      weightSum,
   )
 
-  return { total, framing, subjectSafety: safety, photoQuality: quality, coverage, chronology, balance }
+  return { total, ...score, groupSplitOrder }
 }

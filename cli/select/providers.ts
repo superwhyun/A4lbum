@@ -192,22 +192,38 @@ function extractJson(content: string): Record<string, unknown> {
   return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>
 }
 
+/**
+ * 피사체 상자 한 축(중심 + 크기, %)을 이미지 안으로 정리한다.
+ * 모델이 이미지 밖으로 나간 상자를 주면 가장자리를 잘라낸 뒤 중심/크기를 다시 계산한다.
+ * 크기가 없으면 중심만 0-100으로 자른다 (배치 시 기본 안전 영역을 쓴다).
+ */
+function normalizeAxis(center: number, size: unknown): { center: number; size?: number } {
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return { center: clampPercent(center) }
+  const start = clampPercent(center - size / 2)
+  const end = clampPercent(center + size / 2)
+  // 상자 전체가 이미지 밖이면 가장 가까운 가장자리의 점으로
+  if (end <= start) return { center: clampPercent(center) }
+  return { center: (start + end) / 2, size: end - start }
+}
+
 function normalizeJudgement(raw: Record<string, unknown> | Judgement, source: string): Judgement {
   const value = raw as Record<string, unknown>
   const id = typeof value.id === "string" ? value.id : ""
   if (!id) throw new Error("판정 항목에 id가 없습니다")
 
   const rawSubject = value.subject as { x?: unknown; y?: unknown; w?: unknown; h?: unknown } | undefined
-  const subject =
-    rawSubject && typeof rawSubject.x === "number" && typeof rawSubject.y === "number"
-      ? {
-          x: clampPercent(rawSubject.x),
-          y: clampPercent(rawSubject.y),
-          // 경계상자 크기(w/h)는 사진 배치 시 피사체 비율로 쓰인다. 없으면 사진 전체 비율 사용.
-          ...(typeof rawSubject.w === "number" ? { w: clampPercent(rawSubject.w) } : {}),
-          ...(typeof rawSubject.h === "number" ? { h: clampPercent(rawSubject.h) } : {}),
-        }
-      : undefined
+  let subject: Judgement["subject"]
+  if (rawSubject && typeof rawSubject.x === "number" && typeof rawSubject.y === "number") {
+    // 경계상자 크기(w/h)는 셀 비율 허용 범위와 크롭 위치 계산에 쓰인다. 없으면 기본 안전 영역 사용.
+    const x = normalizeAxis(rawSubject.x, rawSubject.w)
+    const y = normalizeAxis(rawSubject.y, rawSubject.h)
+    subject = {
+      x: x.center,
+      y: y.center,
+      ...(x.size !== undefined ? { w: x.size } : {}),
+      ...(y.size !== undefined ? { h: y.size } : {}),
+    }
+  }
 
   return {
     id,

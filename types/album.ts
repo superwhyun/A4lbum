@@ -21,13 +21,22 @@ export interface PhotoLayout {
   photoId: string
   photoX?: number // 사진의 X 위치 (0-100%)
   photoY?: number // 사진의 Y 위치 (0-100%)
-  photoScale?: number // 사진 확대 배율 (기본 1)
+  /** 예약 필드 — 어떤 렌더러도 아직 구현하지 않으며 자동 배치도 설정하지 않는다 */
+  photoScale?: number
+  /** cover(기본): 프레임을 꽉 채우고 넘치는 부분을 자름. contain: 자르지 않고 테마 배경 위에 레터박스 */
+  fit?: "cover" | "contain"
 }
 
 export interface AlbumPage {
   id: string
   layouts: PhotoLayout[]
   templateId?: string
+  /** 이 페이지 사진들이 속한 그룹(시간/장소 묶음) id */
+  groupIds?: string[]
+  /** 그룹 캡션 (예: "2024.05.12 · 제주 서귀포") */
+  caption?: string
+  /** 앞 페이지에서 이어지는 그룹이면 true */
+  continued?: boolean
   isCoverPage?: boolean
   title?: string
   titlePosition?: { x: number; y: number }

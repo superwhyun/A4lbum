@@ -30,7 +30,7 @@ async function scanOne(
   file: SourceFile,
   options: ScanOptions,
 ): Promise<ScannedPhoto> {
-  const metadata = await readFileMetadata(file.path, file.modifiedAt)
+  const metadata = await readFileMetadata(file.path, file.fileName, file.modifiedAt)
   const { quality, hash } = await analyzePhoto(file.path)
 
   const location =
@@ -45,6 +45,7 @@ async function scanOne(
     bytes: file.bytes,
     date: metadata.date,
     takenAt: metadata.takenAt,
+    timeSource: metadata.timeSource,
     location,
     gps: metadata.gps,
     hash,
