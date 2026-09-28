@@ -1,13 +1,14 @@
 // lib/database.ts
 import { DatabaseAdapter } from './database-types';
 import { SQLiteAdapter } from './database-sqlite';
-// PostgresAdapter(lib/database-postgres.ts)는 참고용으로 파일만 남겨두고 더 이상 사용하지 않는다.
+import { PostgresAdapter } from './database-postgres';
 
-// 모든 환경(로컬, Vercel 배포 포함)에서 SQLite로 고정한다.
-// DATABASE_URL(Neon Postgres 등)이 주입돼 있어도 무시한다.
-// DB 파일 경로는 SQLiteAdapter가 환경에 맞게 결정한다(Vercel: /tmp, 그 외: data/app.db).
+// DATABASE_URL(Neon Postgres 등)이 주입되면 Postgres(영속), 없으면 로컬 SQLite로 폴백.
+// - 로컬/CLI 개발: DATABASE_URL이 없어 SQLiteAdapter(data/app.db) 사용 — 기존 동작 유지.
+// - Vercel 배포: 대시보드 DATABASE_URL(Neon) 주입 시 PostgresAdapter 사용 → 로그인/레이아웃 영속.
+// SQLiteAdapter는 DB 파일 경로를 환경에 맞게 결정(Vercel: /tmp, 그 외: data/app.db).
 const createDatabaseAdapter = (): DatabaseAdapter => {
-  return new SQLiteAdapter();
+  return process.env.DATABASE_URL ? new PostgresAdapter() : new SQLiteAdapter();
 };
 
 // 데이터베이스 인스턴스 생성
