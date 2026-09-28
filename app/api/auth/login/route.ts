@@ -21,8 +21,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (!user.password) {
-      console.log('User has no password (Google-only user?)');
-      return NextResponse.json({ error: '이 계정은 Google 로그인을 사용해주세요.' }, { status: 401 });
+      console.log('User has no password (passwordless/legacy Google-only user)');
+      return NextResponse.json({ error: '이 계정은 비밀번호가 없어 로그인할 수 없습니다. 관리자에게 문의하세요.' }, { status: 401 });
     }
 
     const passwordValid = verifyPassword(password, user.password);

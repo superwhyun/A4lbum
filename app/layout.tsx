@@ -5,7 +5,6 @@ import "./globals.css"
 import { AlbumProvider } from "@/contexts/album-context"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Header } from "@/components/header"
-import { GoogleOAuthProvider } from '@react-oauth/google'
 
 const inter = Inter({ subsets: ["latin"] })
 const nanumPenScript = Nanum_Pen_Script({
@@ -25,26 +24,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-  const providers = (
-    <>
-      <AuthProvider>
-        <AlbumProvider>
-          <LayoutWithHeader>{children}</LayoutWithHeader>
-        </AlbumProvider>
-      </AuthProvider>
-    </>
-  )
   return (
     <html lang="ko" suppressHydrationWarning>
       <body className={`${inter.className} ${nanumPenScript.variable}`}>
-        {/* Google OAuth clientId가 설정돼 있을 때만 GoogleOAuthProvider로 감싼다.
-            설정이 없으면(로컬/자체 운영) 래퍼 없이 바로 렌더 → "Missing client_id" 에러 방지 */}
-        {googleClientId ? (
-          <GoogleOAuthProvider clientId={googleClientId}>{providers}</GoogleOAuthProvider>
-        ) : (
-          providers
-        )}
+        <AuthProvider>
+          <AlbumProvider>
+            <LayoutWithHeader>{children}</LayoutWithHeader>
+          </AlbumProvider>
+        </AuthProvider>
       </body>
     </html>
   )
