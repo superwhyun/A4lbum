@@ -7,7 +7,7 @@ import { PostgresAdapter } from './database-postgres';
 // - 로컬/CLI 개발: DATABASE_URL이 없어 SQLiteAdapter(data/app.db) 사용 — 기존 동작 유지.
 // - Vercel 배포: 대시보드 DATABASE_URL(Neon) 주입 시 PostgresAdapter 사용 → 로그인/레이아웃 영속.
 // SQLiteAdapter는 DB 파일 경로를 환경에 맞게 결정(Vercel: /tmp, 그 외: data/app.db).
-const createDatabaseAdapter = (): DatabaseAdapter => {
+export const createDatabaseAdapter = (): DatabaseAdapter => {
   return process.env.DATABASE_URL ? new PostgresAdapter() : new SQLiteAdapter();
 };
 

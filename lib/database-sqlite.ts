@@ -163,7 +163,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
   }
 
   getLayouts(): Layout[] {
-    return this.db.prepare('SELECT * FROM layouts ORDER BY created_at DESC').all() as Layout[];
+    return this.db.prepare('SELECT * FROM layouts ORDER BY created_at DESC, id DESC').all() as Layout[];
   }
 }
 
